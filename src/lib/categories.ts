@@ -1,0 +1,48 @@
+export const EXPENSE_CATEGORIES = [
+  'Food',
+  'Sport',
+  'Shopping',
+  'Travel',
+  'Health',
+  'Zakat',
+  'Education',
+  'Entertainment',
+  'Housing',
+  'Transport',
+  'Bills',
+  'Subscriptions',
+  'Gifts',
+  'Donations',
+  'Household',
+  'Personal Care',
+  'Insurance',
+  'Debt',
+  'Investments',
+  'Other',
+] as const;
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+// Icon mapping for categories (uses @expo/vector-icons MaterialCommunityIcons names)
+export const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
+  Food: 'food-fork-drink',
+  Sport: 'dumbbell',
+  Shopping: 'shopping',
+  Travel: 'airplane',
+  Health: 'medical-bag',
+  Zakat: 'hand-heart',
+  Education: 'school',
+  Entertainment: 'movie-open',
+  Housing: 'home',
+  Transport: 'car',
+  Bills: 'file-document',
+  Subscriptions: 'refresh',
+  Gifts: 'gift',
+  Donations: 'charity',
+  Household: 'washing-machine',
+  'Personal Care': 'face-woman',
+  Insurance: 'shield-check',
+  Debt: 'bank',
+  Investments: 'chart-line',
+  Other: 'dots-horizontal',
+};

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"c:\\\\Users\\\\FASMATI\\\\Downloads\\\\send to me\\\\App\\\\CoinQuest\" /a)",
+      "Bash(npm install *)",
+      "Bash(npx jest *)"
+    ]
+  }
+}
