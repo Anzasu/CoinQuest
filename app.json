@@ -29,7 +29,9 @@
             "enableProguardInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "scheme": "coinquest",
     "experiments": {

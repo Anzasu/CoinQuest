@@ -42,3 +42,5 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+android/app/build.gradle
