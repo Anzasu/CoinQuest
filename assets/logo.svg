@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f5ebe0"/>
+      <stop offset="100%" stop-color="#e8d5be"/>
+    </radialGradient>
+    <radialGradient id="coin" cx="38%" cy="32%" r="65%">
+      <stop offset="0%" stop-color="#fff0a0"/>
+      <stop offset="35%" stop-color="#f5c842"/>
+      <stop offset="75%" stop-color="#d4900a"/>
+      <stop offset="100%" stop-color="#8a5800"/>
+    </radialGradient>
+    <filter id="starGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="ringGlow" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="98" fill="url(#bg)"/>
+
+  <!-- Outer glow ring -->
+  <circle cx="100" cy="100" r="93" fill="none" stroke="#7c5c3d" stroke-width="5" opacity="0.3" filter="url(#ringGlow)"/>
+  <!-- Outer crisp ring -->
+  <circle cx="100" cy="100" r="93" fill="none" stroke="#7c5c3d" stroke-width="2.5"/>
+
+  <!-- Gold coin body -->
+  <circle cx="100" cy="100" r="74" fill="url(#coin)"/>
+
+  <!-- Coin inner detail ring -->
+  <circle cx="100" cy="100" r="67" fill="none" stroke="#7a4a00" stroke-width="2.5" opacity="0.6"/>
+
+  <!-- Coin surface highlight -->
+  <ellipse cx="82" cy="73" rx="22" ry="14"
+    fill="white" opacity="0.14"
+    transform="rotate(-28, 82, 73)"/>
+
+  <!-- 5-pointed star in dark brown -->
+  <polygon
+    points="100,55 111.2,84.6 142.8,86.1 118.1,105.9 126.5,136.4 100,119 73.5,136.4 81.9,105.9 57.2,86.1 88.8,84.6"
+    fill="#3d1c02"
+    filter="url(#starGlow)"
+  />
+
+  <!-- Sparkle dots in primary brown -->
+  <circle cx="36"  cy="65"  r="2.8" fill="#7c5c3d" opacity="0.75"/>
+  <circle cx="29"  cy="54"  r="1.6" fill="#7c5c3d" opacity="0.45"/>
+  <circle cx="164" cy="65"  r="2.8" fill="#7c5c3d" opacity="0.75"/>
+  <circle cx="171" cy="54"  r="1.6" fill="#7c5c3d" opacity="0.45"/>
+  <circle cx="36"  cy="135" r="2.8" fill="#7c5c3d" opacity="0.75"/>
+  <circle cx="29"  cy="146" r="1.6" fill="#7c5c3d" opacity="0.45"/>
+  <circle cx="164" cy="135" r="2.8" fill="#7c5c3d" opacity="0.75"/>
+  <circle cx="171" cy="146" r="1.6" fill="#7c5c3d" opacity="0.45"/>
+</svg>

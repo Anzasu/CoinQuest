@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bgFin" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5ebe0"/>
+      <stop offset="100%" stop-color="#e8d5be"/>
+    </linearGradient>
+    <!-- Bar colors using light brown part palette -->
+    <linearGradient id="barA" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a0785a"/>
+      <stop offset="100%" stop-color="#6e4f38"/>
+    </linearGradient>
+    <linearGradient id="barB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#5d8a6e"/>
+      <stop offset="100%" stop-color="#3d6050"/>
+    </linearGradient>
+    <linearGradient id="barC" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a7c59"/>
+      <stop offset="100%" stop-color="#2e5038"/>
+    </linearGradient>
+    <linearGradient id="barD" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c8a97e"/>
+      <stop offset="100%" stop-color="#9a7850"/>
+    </linearGradient>
+    <linearGradient id="trendGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a0785a"/>
+      <stop offset="100%" stop-color="#7c5c3d"/>
+    </linearGradient>
+    <filter id="glowLine">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="barShadow">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#3d1c02" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="200" height="200" rx="28" fill="url(#bgFin)"/>
+
+  <!-- Subtle grid lines -->
+  <line x1="20" y1="60"  x2="180" y2="60"  stroke="#3d1c02" stroke-width="0.5" opacity="0.1"/>
+  <line x1="20" y1="90"  x2="180" y2="90"  stroke="#3d1c02" stroke-width="0.5" opacity="0.1"/>
+  <line x1="20" y1="120" x2="180" y2="120" stroke="#3d1c02" stroke-width="0.5" opacity="0.1"/>
+  <line x1="20" y1="150" x2="180" y2="150" stroke="#3d1c02" stroke-width="0.5" opacity="0.1"/>
+
+  <!-- Y-axis line -->
+  <line x1="32" y1="42" x2="32" y2="162" stroke="#3d1c02" stroke-width="1.2" opacity="0.25"/>
+  <!-- X-axis / floor line -->
+  <line x1="32" y1="162" x2="182" y2="162" stroke="#3d1c02" stroke-width="1.2" opacity="0.25"/>
+
+  <!-- Y-axis tick labels -->
+  <text x="28" y="64"  text-anchor="end" font-family="Arial, sans-serif" font-size="7" fill="#7c5c3d" opacity="0.7">600</text>
+  <text x="28" y="94"  text-anchor="end" font-family="Arial, sans-serif" font-size="7" fill="#7c5c3d" opacity="0.7">400</text>
+  <text x="28" y="124" text-anchor="end" font-family="Arial, sans-serif" font-size="7" fill="#7c5c3d" opacity="0.7">200</text>
+
+  <!-- Bars -->
+  <!-- Bar A -->
+  <rect x="44"  y="90"  width="26" height="72" rx="5" fill="url(#barA)" filter="url(#barShadow)"/>
+  <!-- Bar B -->
+  <rect x="82"  y="62"  width="26" height="100" rx="5" fill="url(#barB)" filter="url(#barShadow)"/>
+  <!-- Bar C -->
+  <rect x="120" y="108" width="26" height="54" rx="5" fill="url(#barC)" filter="url(#barShadow)"/>
+  <!-- Bar D -->
+  <rect x="158" y="78"  width="26" height="84" rx="5" fill="url(#barD)" filter="url(#barShadow)"/>
+
+  <!-- Trend line across bar tops -->
+  <polyline
+    points="57,90 95,62 133,108 171,78"
+    fill="none" stroke="url(#trendGrad)" stroke-width="2.5"
+    stroke-linecap="round" stroke-linejoin="round"
+    filter="url(#glowLine)"/>
+
+  <!-- Trend dots -->
+  <circle cx="57"  cy="90"  r="4" fill="#a0785a" stroke="#fdf6ee" stroke-width="1.5"/>
+  <circle cx="95"  cy="62"  r="4" fill="#5d8a6e" stroke="#fdf6ee" stroke-width="1.5"/>
+  <circle cx="133" cy="108" r="4" fill="#4a7c59" stroke="#fdf6ee" stroke-width="1.5"/>
+  <circle cx="171" cy="78"  r="4" fill="#c8a97e" stroke="#fdf6ee" stroke-width="1.5"/>
+
+  <!-- Up-arrow at last point -->
+  <polygon points="171,64 177,78 165,78" fill="#7c5c3d" opacity="0.85"/>
+
+  <!-- Bar X-axis labels -->
+  <text x="57"  y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#a0785a">A</text>
+  <text x="95"  y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#5d8a6e">B</text>
+  <text x="133" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#4a7c59">C</text>
+  <text x="171" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#c8a97e">D</text>
+
+  <!-- Legend row -->
+  <rect x="42"  y="185" width="8" height="8" rx="2" fill="#a0785a"/>
+  <text x="53"  y="193" font-family="Arial, sans-serif" font-size="7" fill="#3d1c02" opacity="0.7">Part A</text>
+  <rect x="82"  y="185" width="8" height="8" rx="2" fill="#5d8a6e"/>
+  <text x="93"  y="193" font-family="Arial, sans-serif" font-size="7" fill="#3d1c02" opacity="0.7">Part B</text>
+  <rect x="122" y="185" width="8" height="8" rx="2" fill="#4a7c59"/>
+  <text x="133" y="193" font-family="Arial, sans-serif" font-size="7" fill="#3d1c02" opacity="0.7">Part C</text>
+  <rect x="158" y="185" width="8" height="8" rx="2" fill="#c8a97e"/>
+  <text x="169" y="193" font-family="Arial, sans-serif" font-size="7" fill="#3d1c02" opacity="0.7">Part D</text>
+
+  <!-- Border -->
+  <rect x="0" y="0" width="200" height="200" rx="28" fill="none" stroke="#7c5c3d" stroke-width="2" opacity="0.5"/>
+</svg>

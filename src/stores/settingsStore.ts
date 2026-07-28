@@ -9,7 +9,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  theme: 'dark',
+  theme: 'lightBrown',
   userName: 'Me',
   setTheme: (theme) => set({ theme }),
   setUserName: (userName) => set({ userName }),

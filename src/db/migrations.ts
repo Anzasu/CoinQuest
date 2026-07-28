@@ -195,7 +195,7 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   // Seed app_settings singleton if not present
   await db.execAsync(`
     INSERT OR IGNORE INTO app_settings (id, theme, user_name, created_at, updated_at)
-    VALUES (1, 'dark', 'Me', datetime('now'), datetime('now'));
+    VALUES (1, 'lightBrown', 'Me', datetime('now'), datetime('now'));
   `);
 
   // Seed achievements

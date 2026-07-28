@@ -203,7 +203,7 @@ export const appSettings = sqliteTable('app_settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   theme: text('theme', {
     enum: ['dark', 'light', 'babyPink', 'lightBrown', 'lightBlue', 'forestGreen'],
-  }).notNull().default('dark'),
+  }).notNull().default('lightBrown'),
   userName: text('user_name').notNull().default('Me'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
