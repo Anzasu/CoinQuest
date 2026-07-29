@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { db } from '@/db';
-import { donationRecords, monthlyPeriods, xpEvents } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { donationRecords, monthlyPeriods, xpEvents, ledgerParts } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { XP_AMOUNTS } from '@/lib/xp';
 import { nowIso, todayIso } from '@/lib/dates';
 
@@ -34,13 +34,28 @@ export function useDonation() {
       })
       .where(eq(donationRecords.id, record.id));
 
-    // Update period
+    // Deduct donation amount from Part D balance
+    const dParts = await db
+      .select()
+      .from(ledgerParts)
+      .where(and(eq(ledgerParts.periodId, periodId), eq(ledgerParts.partType, 'D')));
+    if (dParts[0]) {
+      await db
+        .update(ledgerParts)
+        .set({ currentBalanceCents: dParts[0].currentBalanceCents - record.requiredAmountCents })
+        .where(eq(ledgerParts.id, dParts[0].id));
+    }
+
+    // Update period spent + donation flags
+    const periodRows = await db.select().from(monthlyPeriods).where(eq(monthlyPeriods.id, periodId));
+    const newSpent = (periodRows[0]?.monthlySpentCents ?? 0) + record.requiredAmountCents;
     await db
       .update(monthlyPeriods)
       .set({
         donationCompleted: true,
         donationCompletedAt: now,
         monthlyXpEarned: await incrementPeriodXp(periodId, xpAmount),
+        monthlySpentCents: newSpent,
       })
       .where(eq(monthlyPeriods.id, periodId));
 
@@ -80,9 +95,24 @@ export function useDonation() {
       .set({ status: 'pending', completedAt: null, completedAmountCents: 0, xpAwarded: 0 })
       .where(eq(donationRecords.id, record.id));
 
+    // Restore Part D balance
+    const dParts = await db
+      .select()
+      .from(ledgerParts)
+      .where(and(eq(ledgerParts.periodId, periodId), eq(ledgerParts.partType, 'D')));
+    if (dParts[0]) {
+      await db
+        .update(ledgerParts)
+        .set({ currentBalanceCents: dParts[0].currentBalanceCents + record.requiredAmountCents })
+        .where(eq(ledgerParts.id, dParts[0].id));
+    }
+
+    // Restore period monthly spent
+    const periodRows = await db.select().from(monthlyPeriods).where(eq(monthlyPeriods.id, periodId));
+    const restoredSpent = Math.max(0, (periodRows[0]?.monthlySpentCents ?? 0) - record.requiredAmountCents);
     await db
       .update(monthlyPeriods)
-      .set({ donationCompleted: false, donationCompletedAt: null })
+      .set({ donationCompleted: false, donationCompletedAt: null, monthlySpentCents: restoredSpent })
       .where(eq(monthlyPeriods.id, periodId));
   }, []);
 

@@ -24,8 +24,8 @@ export default function MonthListScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Monthly Periods" />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title="Monthly Periods" color={theme.colors.onSurface} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>

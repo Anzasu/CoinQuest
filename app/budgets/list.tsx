@@ -39,8 +39,9 @@ export default function BudgetsListScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Budgets" />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title="Budgets" color={theme.colors.onSurface} />
+        <Appbar.Action icon="plus" onPress={() => router.push('/budgets/add')} color={theme.colors.primary} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>

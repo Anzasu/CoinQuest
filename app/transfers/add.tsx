@@ -23,7 +23,7 @@ const TRANSFER_OPTIONS: { value: TransferType; label: string; part: 'A' | 'B' | 
 ];
 
 export default function AddTransferScreen() {
-  const { periodId: pidParam } = useLocalSearchParams<{ periodId?: string }>();
+  const { periodId: pidParam, preselect } = useLocalSearchParams<{ periodId?: string; preselect?: string }>();
   const theme = useAppTheme();
   const router = useRouter();
   const { addTransfer } = useTransfers();
@@ -33,7 +33,7 @@ export default function AddTransferScreen() {
 
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayIso());
-  const [transferType, setTransferType] = useState<TransferType>('DtoPiggyBank');
+  const [transferType, setTransferType] = useState<TransferType>((preselect as TransferType) ?? 'DtoPiggyBank');
   const [note, setNote] = useState('');
   const [selectedPiggyBank, setSelectedPiggyBank] = useState<number | null>(null);
   const [piggyBanks, setPiggyBanks] = useState<{ id: number; name: string }[]>([]);
@@ -98,8 +98,8 @@ export default function AddTransferScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Add Transfer" />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title="Add Transfer" color={theme.colors.onSurface} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>

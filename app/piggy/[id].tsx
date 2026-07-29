@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Appbar, Button, Surface, Chip, SegmentedButtons } from 'react-native-paper';
+import { Text, Appbar, Button, Surface, SegmentedButtons, Dialog, Portal, TextInput } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -11,7 +11,12 @@ import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { formatCents } from '@/lib/money';
 import { formatDateDisplay, todayIso } from '@/lib/dates';
-import { Dialog, Portal, TextInput } from 'react-native-paper';
+import { db } from '@/db';
+import { piggyBanks as piggyBanksTable, piggyBankTransactions } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { nowIso } from '@/lib/dates';
+
+type ActionType = 'add' | 'withdraw' | 'spend';
 
 export default function PiggyBankDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,26 +27,27 @@ export default function PiggyBankDetailScreen() {
 
   const [pb, setPb] = useState<PiggyBank | null>(null);
   const [transactions, setTransactions] = useState<PiggyBankTransaction[]>([]);
-  const [actionDialog, setActionDialog] = useState<'remove' | 'spend' | null>(null);
+  const [actionDialog, setActionDialog] = useState<ActionType | null>(null);
   const [actionAmount, setActionAmount] = useState<number | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [actionBalanceType, setActionBalanceType] = useState<'account' | 'cash'>('account');
   const [archiveDialog, setArchiveDialog] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const pbId = Number(id);
 
-  useFocusEffect(
-    useCallback(() => {
-      async function load() {
-        const bank = await getPiggyBank(pbId);
-        setPb(bank ?? null);
-        const txns = await getTransactions(pbId);
-        setTransactions(txns);
-      }
-      load();
-    }, [pbId]),
-  );
+  async function reload() {
+    const bank = await getPiggyBank(pbId);
+    setPb(bank ?? null);
+    const txns = await getTransactions(pbId);
+    setTransactions(txns);
+  }
+
+  useFocusEffect(useCallback(() => { reload(); }, [pbId]));
+
+  // Can delete if no real funds have been added (only opening cash)
+  const canDelete = pb != null && pb.totalAddedAllTimeCents === 0 && pb.totalSpentAllTimeCents === 0 && pb.totalRemovedAllTimeCents === 0;
 
   async function handleAction() {
     if (!actionAmount || actionAmount <= 0 || !pb) return;
@@ -50,7 +56,24 @@ export default function PiggyBankDetailScreen() {
       const periods = await getAllPeriods();
       const open = periods.find((p) => p.status === 'open') ?? periods[0];
 
-      if (actionDialog === 'remove') {
+      if (actionDialog === 'add') {
+        // Add funds directly to piggy bank (no Part D deduction — that is done via transfers/add DtoPiggyBank)
+        // This "add" is for recording cash added directly (e.g. cash from wallet)
+        await db.update(piggyBanksTable).set({
+          totalAddedAllTimeCents: pb.totalAddedAllTimeCents + actionAmount,
+          balanceCashCents: actionBalanceType === 'cash' ? pb.balanceCashCents + actionAmount : pb.balanceCashCents,
+          balanceOnAccountCents: actionBalanceType === 'account' ? pb.balanceOnAccountCents + actionAmount : pb.balanceOnAccountCents,
+        }).where(eq(piggyBanksTable.id, pbId));
+        await db.insert(piggyBankTransactions).values({
+          piggyBankId: pbId,
+          date: todayIso(),
+          amountCents: actionAmount,
+          type: 'add',
+          balanceType: actionBalanceType,
+          note: actionNote.trim() || null,
+          createdAt: nowIso(),
+        });
+      } else if (actionDialog === 'withdraw') {
         await removeFunds({
           piggyBankId: pbId,
           amountCents: actionAmount,
@@ -69,10 +92,7 @@ export default function PiggyBankDetailScreen() {
         });
       }
 
-      const updated = await getPiggyBank(pbId);
-      setPb(updated ?? null);
-      const txns = await getTransactions(pbId);
-      setTransactions(txns);
+      await reload();
       setActionDialog(null);
       setActionAmount(null);
       setActionNote('');
@@ -89,17 +109,33 @@ export default function PiggyBankDetailScreen() {
     router.back();
   }
 
+  async function handleDelete() {
+    await db.delete(piggyBankTransactions).where(eq(piggyBankTransactions.piggyBankId, pbId));
+    await db.delete(piggyBanksTable).where(eq(piggyBanksTable.id, pbId));
+    setDeleteDialog(false);
+    router.back();
+  }
+
   if (!pb) return null;
 
   const totalBalance = pb.balanceOnAccountCents + pb.balanceCashCents;
 
+  const ACTION_TITLES: Record<ActionType, string> = {
+    add: 'Add funds',
+    withdraw: 'Withdraw funds',
+    spend: 'Spend from piggy bank',
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title={pb.name} />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title={pb.name} color={theme.colors.onSurface} />
         {!pb.isArchived && (
-          <Appbar.Action icon="archive" onPress={() => setArchiveDialog(true)} />
+          <Appbar.Action icon="archive" onPress={() => setArchiveDialog(true)} color={theme.colors.primary} />
+        )}
+        {canDelete && (
+          <Appbar.Action icon="delete" onPress={() => setDeleteDialog(true)} color={theme.colors.error} />
         )}
       </Appbar.Header>
 
@@ -130,14 +166,27 @@ export default function PiggyBankDetailScreen() {
 
         {/* Action buttons */}
         {!pb.isArchived && (
-          <View style={styles.actions}>
-            <Button mode="contained-tonal" icon="minus" onPress={() => setActionDialog('remove')} style={{ flex: 1 }}>
-              Remove
-            </Button>
-            <Button mode="contained" icon="cash" onPress={() => setActionDialog('spend')} style={{ flex: 1 }}>
-              Spend
-            </Button>
-          </View>
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.colors.onBackground + '88' }]}>ACTIONS</Text>
+            <View style={styles.actions}>
+              <Button mode="contained" icon="plus" onPress={() => setActionDialog('add')} style={{ flex: 1 }} buttonColor={theme.custom.income}>
+                Add
+              </Button>
+              <Button mode="contained-tonal" icon="cash-minus" onPress={() => setActionDialog('withdraw')} style={{ flex: 1 }}>
+                Withdraw
+              </Button>
+              <Button mode="contained" icon="cart" onPress={() => setActionDialog('spend')} style={{ flex: 1 }}>
+                Spend
+              </Button>
+            </View>
+            <View style={[styles.helpRow, { backgroundColor: theme.colors.surfaceVariant, borderRadius: 8, padding: 10 }]}>
+              <Text style={[styles.helpText, { color: theme.colors.onSurface + '88' }]}>
+                <Text style={{ fontWeight: '700' }}>Add</Text> — record cash or card added to this piggy bank.{'\n'}
+                <Text style={{ fontWeight: '700' }}>Withdraw</Text> — take money back out (no spending recorded).{'\n'}
+                <Text style={{ fontWeight: '700' }}>Spend</Text> — buy something using piggy bank funds.
+              </Text>
+            </View>
+          </>
         )}
 
         {/* Transaction list */}
@@ -149,16 +198,14 @@ export default function PiggyBankDetailScreen() {
             <Surface key={t.id} style={[styles.txnRow, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
               <View style={styles.txnContent}>
                 <Text style={[styles.txnType, { color: theme.colors.onSurface }]}>
-                  {t.type === 'add' ? '↓ Added' : t.type === 'remove' ? '↑ Removed' : '💸 Spent'}
+                  {t.type === 'add' ? '↓ Added' : t.type === 'remove' ? '↑ Withdrawn' : '💸 Spent'}
                   {' · '}{t.balanceType}
                 </Text>
                 <Text style={[styles.txnMeta, { color: theme.colors.onSurface + '66' }]}>
                   {formatDateDisplay(t.date)}{t.note ? ` · ${t.note}` : ''}
                 </Text>
               </View>
-              <Text style={[styles.txnAmount, {
-                color: t.type === 'add' ? theme.custom.income : theme.colors.error,
-              }]}>
+              <Text style={[styles.txnAmount, { color: t.type === 'add' ? theme.custom.income : theme.colors.error }]}>
                 {t.type === 'add' ? '+' : '-'}{formatCents(t.amountCents)}
               </Text>
             </Surface>
@@ -168,18 +215,20 @@ export default function PiggyBankDetailScreen() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Remove/Spend dialog */}
+      {/* Add / Withdraw / Spend dialog */}
       <Portal>
         <Dialog visible={!!actionDialog} onDismiss={() => setActionDialog(null)}>
-          <Dialog.Title>{actionDialog === 'remove' ? 'Remove funds' : 'Spend from piggy bank'}</Dialog.Title>
+          <Dialog.Title>{actionDialog ? ACTION_TITLES[actionDialog] : ''}</Dialog.Title>
           <Dialog.Content style={{ gap: 12 }}>
             <MoneyInput label="Amount" valueCents={actionAmount} onChange={setActionAmount} />
-            <Text style={{ color: theme.colors.onSurface + '77', fontSize: 13 }}>Balance source</Text>
+            <Text style={{ color: theme.colors.onSurface + '77', fontSize: 13 }}>
+              {actionDialog === 'add' ? 'How was it added?' : 'Balance source'}
+            </Text>
             <SegmentedButtons
               value={actionBalanceType}
               onValueChange={(v) => setActionBalanceType(v as 'account' | 'cash')}
               buttons={[
-                { value: 'account', label: 'Account' },
+                { value: 'account', label: 'Account / Card' },
                 { value: 'cash', label: 'Cash' },
               ]}
             />
@@ -203,10 +252,19 @@ export default function PiggyBankDetailScreen() {
       <ConfirmDialog
         visible={archiveDialog}
         title="Archive piggy bank?"
-        message={`Archive "${pb.name}"? You can still see it but cannot add more funds.`}
+        message={`Archive "${pb.name}"? You can still view it but cannot add more funds.`}
         confirmLabel="Archive"
         onConfirm={handleArchive}
         onCancel={() => setArchiveDialog(false)}
+      />
+
+      <ConfirmDialog
+        visible={deleteDialog}
+        title="Delete piggy bank?"
+        message={`Delete "${pb.name}"? This cannot be undone. Only allowed because no funds have been added yet.`}
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteDialog(false)}
       />
     </View>
   );
@@ -221,8 +279,10 @@ const styles = StyleSheet.create({
   balanceRow: { flexDirection: 'row', gap: 16, flexWrap: 'wrap', marginTop: 4 },
   metaLabel: { fontSize: 11 },
   metaValue: { fontSize: 14, fontWeight: '700' },
-  actions: { flexDirection: 'row', gap: 12, marginBottom: 4 },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 8 },
+  actions: { flexDirection: 'row', gap: 8 },
+  helpRow: { marginTop: 4 },
+  helpText: { fontSize: 12, lineHeight: 18 },
   txnRow: { borderRadius: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   txnContent: { flex: 1 },
   txnType: { fontSize: 14, fontWeight: '600' },

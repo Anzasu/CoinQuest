@@ -89,10 +89,10 @@ export default function MonthDetailScreen() {
   if (!period) return null;
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'D', label: 'Part D' },
-    { key: 'A', label: 'Part A' },
-    { key: 'B', label: 'Part B' },
-    { key: 'C', label: 'Part C' },
+    { key: 'D', label: 'Spending' },
+    { key: 'A', label: 'B&M Savings' },
+    { key: 'B', label: 'B&M Expenses' },
+    { key: 'C', label: 'Emergency Fund' },
     { key: 'income', label: 'Income' },
     { key: 'budget', label: 'Budget' },
     { key: 'donation', label: 'Donation' },
@@ -101,15 +101,15 @@ export default function MonthDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title={formatMonthYear(period.month, period.year)} subtitle={period.status === 'closed' ? 'Closed' : 'Open'} />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title={formatMonthYear(period.month, period.year)} subtitle={period.status === 'closed' ? 'Closed' : 'Open'} color={theme.colors.onSurface} />
         {period.status === 'open' ? (
-          <Appbar.Action icon="lock" onPress={() => setCloseDialog(true)} />
+          <Appbar.Action icon="lock" onPress={() => setCloseDialog(true)} color={theme.colors.primary} />
         ) : (
-          <Appbar.Action icon="lock-open" onPress={handleReopen} />
+          <Appbar.Action icon="lock-open" onPress={handleReopen} color={theme.colors.primary} />
         )}
-        <Appbar.Action icon="plus" onPress={() => router.push({ pathname: '/expenses/add', params: { periodId } })} />
-        <Appbar.Action icon="bank-transfer" onPress={() => router.push({ pathname: '/transfers/add', params: { periodId } })} />
+        <Appbar.Action icon="plus" onPress={() => router.push({ pathname: '/expenses/add', params: { periodId } })} color={theme.colors.primary} />
+        <Appbar.Action icon="bank-transfer" onPress={() => router.push({ pathname: '/transfers/add', params: { periodId } })} color={theme.colors.primary} />
       </Appbar.Header>
 
       {/* Tab strip */}
@@ -178,6 +178,16 @@ function PartDetailView({ part, tab, expenses, transfers, theme, period, onDelet
   const partColors = { A: theme.custom.partA, B: theme.custom.partB, C: theme.custom.partC, D: theme.custom.partD };
   const color = partColors[tab as 'A' | 'B' | 'C' | 'D'];
 
+  // Category spending breakdown for Part D
+  const categoryTotals: Record<string, number> = {};
+  if (tab === 'D') {
+    for (const e of expenses as Expense[]) {
+      categoryTotals[e.category] = (categoryTotals[e.category] ?? 0) + e.amountCents;
+    }
+  }
+  const categoryRows = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+  const maxCat = categoryRows.length > 0 ? categoryRows[0][1] : 1;
+
   return (
     <View style={{ gap: 8 }}>
       <Surface style={[styles.partSummary, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
@@ -200,6 +210,23 @@ function PartDetailView({ part, tab, expenses, transfers, theme, period, onDelet
           )}
         </View>
       </Surface>
+
+      {tab === 'D' && categoryRows.length > 0 && (
+        <>
+          <Text style={[styles.sectionLabel, { color: theme.colors.onBackground + '77' }]}>SPENDING BY CATEGORY</Text>
+          <Surface style={[styles.partSummary, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder, gap: 8 }]}>
+            {categoryRows.map(([cat, cents]) => (
+              <View key={cat} style={styles.catRow}>
+                <Text style={[styles.catLabel, { color: theme.colors.onSurface + '99' }]}>{cat}</Text>
+                <View style={styles.catBarWrap}>
+                  <View style={[styles.catBar, { width: `${Math.round((cents / maxCat) * 100)}%`, backgroundColor: color }]} />
+                </View>
+                <Text style={[styles.catValue, { color: theme.colors.onSurface }]}>{formatCents(cents)}</Text>
+              </View>
+            ))}
+          </Surface>
+        </>
+      )}
 
       {tab === 'D' && expenses.length > 0 && (
         <>
@@ -353,6 +380,11 @@ const styles = StyleSheet.create({
   txnMeta: { fontSize: 12, marginTop: 2 },
   txnAmount: { fontSize: 14, fontWeight: '700' },
   deleteBtn: { fontSize: 18, paddingHorizontal: 4 },
+  catRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  catLabel: { fontSize: 12, width: 90 },
+  catBarWrap: { flex: 1, height: 10, backgroundColor: '#00000011', borderRadius: 5, overflow: 'hidden' },
+  catBar: { height: 10, borderRadius: 5 },
+  catValue: { fontSize: 12, fontWeight: '700', width: 72, textAlign: 'right' },
   donationCard: { borderRadius: 12, borderWidth: 1, padding: 20, gap: 8 },
   donLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   donAmount: { fontSize: 32, fontWeight: '800' },

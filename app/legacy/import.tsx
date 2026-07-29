@@ -1,13 +1,21 @@
 import React, { useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { Text, Appbar, Button, Surface, Divider } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useLegacyImport } from '@/hooks/useLegacyImport';
 import { MoneyInput } from '@/components/MoneyInput';
 import { formatCents } from '@/lib/money';
 import { formatDateDisplay } from '@/lib/dates';
+
+const PART_LABELS: Record<string, string> = {
+  A: 'B&M Savings',
+  B: 'B&M Expenses',
+  C: 'Emergency Fund',
+  D: 'Spending',
+};
 
 export default function LegacyImportScreen() {
   const theme = useAppTheme();
@@ -19,6 +27,7 @@ export default function LegacyImportScreen() {
     A: null, B: null, C: null, D: null,
   });
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ A: false, B: false, C: false, D: false });
 
   useFocusEffect(
     useCallback(() => {
@@ -29,12 +38,13 @@ export default function LegacyImportScreen() {
   async function handleImport(part: 'A' | 'B' | 'C' | 'D') {
     const amt = amounts[part];
     if (!amt || amt <= 0) {
-      Alert.alert('Invalid amount', 'Enter a valid amount for Part ' + part);
+      Alert.alert('Invalid amount', 'Enter a valid amount for ' + PART_LABELS[part]);
       return;
     }
     setSaving(true);
     try {
       await addImport({ partType: part, amountCents: amt });
+      // Reset input to null (empty) after successful add
       setAmounts((prev) => ({ ...prev, [part]: null }));
       const updated = await getAll();
       setImports(updated);
@@ -60,17 +70,16 @@ export default function LegacyImportScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Legacy Import" subtitle="Pre-app historical balances" />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title="Legacy Import" subtitle="Pre-app historical balances" color={theme.colors.onSurface} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Surface style={[styles.infoBox, { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.custom.cardBorder }]}>
           <Text style={[styles.infoTitle, { color: theme.colors.onSurface }]}>What is this?</Text>
           <Text style={[styles.infoText, { color: theme.colors.onSurface + '88' }]}>
-            If you tracked Parts A–D before using this app, you can enter those historical totals here.
-            These values are setup data — they contribute to all-time totals but do NOT create fake monthly
-            transactions, do NOT affect donation goals, and do NOT affect piggy banks.
+            If you tracked parts before using this app, enter those historical totals here.
+            These contribute to all-time totals but do NOT create monthly transactions or affect donations.
           </Text>
         </Surface>
 
@@ -81,14 +90,46 @@ export default function LegacyImportScreen() {
                 <Text style={styles.partLetter}>{part}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.partLabel, { color: theme.colors.onBackground }]}>Part {part}</Text>
+                <Text style={[styles.partLabel, { color: theme.colors.onBackground }]}>{PART_LABELS[part]}</Text>
                 <Text style={[styles.partTotal, { color: theme.colors.onBackground + '77' }]}>
                   Legacy total: {formatCents(total)}
                 </Text>
               </View>
             </View>
 
-            {records.map((r: any) => (
+            {/* Add row */}
+            <View style={styles.addRow}>
+              <View style={{ flex: 1 }}>
+                <MoneyInput
+                  label={`Add to ${PART_LABELS[part]}`}
+                  valueCents={amounts[part]}
+                  onChange={(v) => setAmounts((prev) => ({ ...prev, [part]: v }))}
+                />
+              </View>
+              <Button mode="contained-tonal" onPress={() => handleImport(part)} loading={saving} compact style={{ alignSelf: 'flex-end' }}>
+                Add
+              </Button>
+            </View>
+
+            {/* Collapsible history */}
+            {records.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setExpanded((prev) => ({ ...prev, [part]: !prev[part] }))}
+                style={[styles.historyToggle, { backgroundColor: theme.colors.surfaceVariant, borderRadius: 8 }]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.historyToggleText, { color: theme.colors.onSurface + '88' }]}>
+                  History ({records.length} {records.length === 1 ? 'entry' : 'entries'})
+                </Text>
+                <MaterialCommunityIcons
+                  name={expanded[part] ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={theme.colors.onSurface + '77'}
+                />
+              </TouchableOpacity>
+            )}
+
+            {expanded[part] && records.map((r: any) => (
               <Surface key={r.id} style={[styles.record, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.recordAmt, { color: theme.colors.onSurface }]}>{formatCents(r.amountCents)}</Text>
@@ -100,18 +141,6 @@ export default function LegacyImportScreen() {
               </Surface>
             ))}
 
-            <View style={styles.addRow}>
-              <View style={{ flex: 1 }}>
-                <MoneyInput
-                  label={`Add to Part ${part}`}
-                  valueCents={amounts[part]}
-                  onChange={(v) => setAmounts((prev) => ({ ...prev, [part]: v }))}
-                />
-              </View>
-              <Button mode="contained-tonal" onPress={() => handleImport(part)} loading={saving} compact style={{ alignSelf: 'flex-end' }}>
-                Add
-              </Button>
-            </View>
             <Divider style={{ marginVertical: 8 }} />
           </View>
         ))}
@@ -134,9 +163,11 @@ const styles = StyleSheet.create({
   partLetter: { color: '#fff', fontSize: 16, fontWeight: '800' },
   partLabel: { fontSize: 16, fontWeight: '700' },
   partTotal: { fontSize: 13 },
+  addRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  historyToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
+  historyToggleText: { fontSize: 13, fontWeight: '600' },
   record: { borderRadius: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   recordAmt: { fontSize: 15, fontWeight: '700' },
   recordDate: { fontSize: 12 },
   deleteBtn: { fontSize: 18, paddingHorizontal: 4 },
-  addRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
 });

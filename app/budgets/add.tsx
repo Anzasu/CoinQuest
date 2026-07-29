@@ -49,8 +49,8 @@ export default function AddBudgetScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Add Category Budget" />
+        <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
+        <Appbar.Content title="Add Budget" color={theme.colors.onSurface} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>
