@@ -25,8 +25,8 @@ const PART_LABELS: Record<PartKey, string> = {
 };
 
 const PART_DESCRIPTIONS: Record<PartKey, string> = {
-  A: 'Held for third party',
-  B: 'Held for third party',
+  A: '',
+  B: '',
   C: 'Protected reserve',
   D: 'General spending pot',
 };

@@ -15,8 +15,8 @@ interface PartCardProps {
 }
 
 const PART_DESCRIPTIONS: Record<string, string> = {
-  A: 'Third-party held',
-  B: 'Third-party held',
+  A: 'Baba & Mama`s Savings',
+  B: 'Baba & Mama`s Expense',
   C: 'Emergency fund',
   D: 'General spending',
 };

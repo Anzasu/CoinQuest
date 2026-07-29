@@ -7,16 +7,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { usePeriods } from '@/hooks/usePeriods';
 import { useDonation } from '@/hooks/useDonation';
-import { useGamification } from '@/hooks/useGamification';
 import { useLegacyImport } from '@/hooks/useLegacyImport';
-import { useSettingsStore } from '@/stores/settingsStore';
-import { XpBar } from '@/components/XpBar';
 import { DonationCard } from '@/components/DonationCard';
 import { formatCents } from '@/lib/money';
 import { formatMonthYear } from '@/lib/dates';
 import { db } from '@/db';
-import { piggyBanks, monthlyPeriods, ledgerParts } from '@/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { piggyBanks, ledgerParts } from '@/db/schema';
 import type { Period } from '@/hooks/usePeriods';
 import type { DonationRecord } from '@/hooks/useDonation';
 
@@ -32,17 +28,13 @@ const PART_LABELS: Record<string, string> = {
 export default function DashboardScreen() {
   const theme = useAppTheme();
   const router = useRouter();
-  const userName = useSettingsStore((s) => s.userName);
   const { getAllPeriods, getLedgerParts } = usePeriods();
   const { getDonationRecord, completeDonation, undoDonation } = useDonation();
-  const { getGamificationStats } = useGamification();
   const { getLegacyTotals } = useLegacyImport();
 
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [donationRecord, setDonationRecord] = useState<DonationRecord | undefined>();
-  const [gamification, setGamification] = useState<{ totalXp: number; level: number; progress: number; xpToNextLevel: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [fabOpen, setFabOpen] = useState(false);
 
   // All-time per-part totals: sum of monthlyTotalCents across all periods + legacy
   const [allTimeTotals, setAllTimeTotals] = useState<Record<string, number>>({ A: 0, B: 0, C: 0, D: 0 });
@@ -113,9 +105,6 @@ export default function DashboardScreen() {
     const pbs = await db.select().from(piggyBanks);
     const active = pbs.filter((p) => !p.isArchived);
     setPiggyTotal(active.reduce((s, p) => s + p.balanceOnAccountCents + p.balanceCashCents, 0));
-
-    const stats = await getGamificationStats();
-    setGamification({ totalXp: stats.totalXp, level: stats.level, progress: stats.progress, xpToNextLevel: stats.xpToNextLevel });
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -155,8 +144,9 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: theme.colors.onBackground + '88' }]}>Welcome back,</Text>
-            <Text style={[styles.name, { color: theme.colors.onBackground }]}>{userName}</Text>
+            <Text style={[styles.name, { color: theme.colors.onBackground }]}>Anzasu</Text>
           </View>
+          <TouchableOpacity onPress={() => router.push('/month/list')} activeOpacity={0.7}>
           {activePeriod && (
             <Surface style={[styles.monthBadge, { backgroundColor: theme.colors.primary + '22' }]}>
               <Text style={[styles.monthText, { color: theme.colors.primary }]}>
@@ -164,17 +154,39 @@ export default function DashboardScreen() {
               </Text>
             </Surface>
           )}
+          </TouchableOpacity>
         </View>
 
-        {/* XP Bar */}
-        {gamification && (
-          <XpBar
-            totalXp={gamification.totalXp}
-            level={gamification.level}
-            progress={gamification.progress}
-            xpToNext={gamification.xpToNextLevel}
-          />
-        )}
+        {/*Action buttons here: add expense, add transaction, add income; replaces the floating action button*/}
+        <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ACTIONS</Text>
+            <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
+              <View style={styles.switchRow}>
+                <TouchableOpacity
+                  onPress={() => router.push('/expenses/add')}
+                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'month' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
+                    Add Expense
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSpendingView('year')}
+                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'year' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
+                    Add Transaction
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSpendingView('year')}
+                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'year' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
+                    Add Extra Income
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Surface>
 
         {!hasPeriod ? (
           <Surface style={[styles.noMonth, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
@@ -278,51 +290,6 @@ export default function DashboardScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* FAB */}
-      {!hasPeriod ? (
-        <FAB
-          icon="plus"
-          label="Start Month"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          color="#fff"
-          onPress={() => router.push('/month/new')}
-        />
-      ) : (
-        <Portal>
-          <FAB.Group
-            open={fabOpen}
-            visible
-            icon={fabOpen ? 'close' : 'plus'}
-            color="#fff"
-            fabStyle={{ backgroundColor: theme.colors.primary, bottom: 80 }}
-            onStateChange={({ open }) => setFabOpen(open)}
-            actions={[
-              {
-                icon: 'receipt',
-                label: 'Add Expense',
-                onPress: () => router.push('/expenses/add'),
-                style: { backgroundColor: theme.custom.partD },
-                color: '#fff',
-              },
-              {
-                icon: 'cash-minus',
-                label: 'Cash Out (Spending)',
-                onPress: () => router.push({ pathname: '/transfers/add', params: { periodId: activePeriod.id, preselect: 'DCashWithdrawal' } }),
-                style: { backgroundColor: theme.custom.partC },
-                color: '#fff',
-              },
-              {
-                icon: 'cash-plus',
-                label: 'Extra Income',
-                onPress: () => router.push({ pathname: '/income/add', params: { periodId: activePeriod.id } }),
-                style: { backgroundColor: theme.custom.income },
-                color: '#fff',
-              },
-            ]}
-          />
-        </Portal>
-      )}
     </View>
   );
 }
