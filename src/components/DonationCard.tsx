@@ -40,7 +40,7 @@ export function DonationCard({ record, onComplete, onUndo, onPress }: DonationCa
         </View>
         <Text style={[styles.amount, { color: statusColor }]}>{formatCents(record.requiredAmountCents)}</Text>
         <Text style={[styles.sub, { color: theme.colors.onSurface + '66' }]}>
-          25% of Part D · {record.xpAwarded > 0}
+          25% of Part D
         </Text>
         {!isCompleted && !isMissed && (
           <Button mode="contained" onPress={onComplete} style={styles.btn} compact>

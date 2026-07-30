@@ -9,7 +9,6 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useTransfers } from '@/hooks/useTransfers';
 import { useDonation } from '@/hooks/useDonation';
 import { useExternalIncome } from '@/hooks/useExternalIncome';
-import { useGamification } from '@/hooks/useGamification';
 import { formatCents } from '@/lib/money';
 import { formatDateDisplay, formatMonthYear } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
@@ -30,8 +29,6 @@ export default function MonthDetailScreen() {
   const { getTransfersForPeriod, deleteTransfer } = useTransfers();
   const { getDonationRecord, completeDonation, undoDonation } = useDonation();
   const { getForPeriod, deleteExternalIncome } = useExternalIncome();
-  const { awardBudgetUnderXp } = useGamification();
-
   const [period, setPeriod] = useState<Period | null>(null);
   const [parts, setParts] = useState<LedgerPart[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -68,12 +65,6 @@ export default function MonthDetailScreen() {
 
   async function handleClose() {
     if (!period) return;
-    // Mark donation as missed if still pending
-    if (donation?.status === 'pending') {
-      const { useDonation: d } = await import('@/hooks/useDonation');
-    }
-    // Award budget XP
-    await awardBudgetUnderXp(periodId);
     await closePeriod(periodId);
     const updated = await getPeriod(periodId);
     setPeriod(updated ?? null);
@@ -165,7 +156,7 @@ export default function MonthDetailScreen() {
       <ConfirmDialog
         visible={closeDialog}
         title="Close month?"
-        message={`Close ${formatMonthYear(period.month, period.year)}? Budget XP will be awarded if applicable. You can reopen this month later for corrections.`}
+        message={`Close ${formatMonthYear(period.month, period.year)}? You can reopen this month later for corrections.`}
         confirmLabel="Close month"
         onConfirm={handleClose}
         onCancel={() => setCloseDialog(false)}
@@ -331,7 +322,7 @@ function DonationView({ donation, theme, onComplete, onUndo }: any) {
       <Text style={[styles.donLabel, { color: theme.colors.onSurface + '77' }]}>Donation goal</Text>
       <Text style={[styles.donAmount, { color: statusColor }]}>{formatCents(donation.requiredAmountCents)}</Text>
       <Text style={[styles.donStatus, { color: statusColor }]}>{donation.status === 'completed' ? '✓ Completed' : donation.status === 'missed' ? 'Missed' : 'Pending'}</Text>
-      {donation.status === 'pending' && <Button mode="contained" onPress={onComplete} style={{ marginTop: 8 }}>Mark as Donated (+100 XP)</Button>}
+      {donation.status === 'pending' && <Button mode="contained" onPress={onComplete} style={{ marginTop: 8 }}>Mark as Donated</Button>}
       {donation.status === 'completed' && <Button mode="text" onPress={onUndo} style={{ marginTop: 4 }}>Undo</Button>}
     </Surface>
   );

@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useTransfers } from '@/hooks/useTransfers';
 import { usePiggyBanks } from '@/hooks/usePiggyBanks';
-import { useGamification } from '@/hooks/useGamification';
 import { usePeriods } from '@/hooks/usePeriods';
 import { MoneyInput } from '@/components/MoneyInput';
 import { todayIso } from '@/lib/dates';
@@ -28,7 +27,6 @@ export default function AddTransferScreen() {
   const router = useRouter();
   const { addTransfer } = useTransfers();
   const { getAllPiggyBanks } = usePiggyBanks();
-  const { awardPiggyBankXp } = useGamification();
   const { getAllPeriods } = usePeriods();
 
   const [amountCents, setAmountCents] = useState<number | null>(null);
@@ -81,11 +79,6 @@ export default function AddTransferScreen() {
         piggyBankId: transferType === 'DtoPiggyBank' ? selectedPiggyBank! : undefined,
         note: note.trim() || undefined,
       });
-
-      // Award XP for piggy bank funding
-      if (transferType === 'DtoPiggyBank' && selectedPiggyBank) {
-        await awardPiggyBankXp(periodId, selectedPiggyBank);
-      }
 
       router.back();
     } catch (e: any) {

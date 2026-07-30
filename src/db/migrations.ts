@@ -45,7 +45,6 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       donation_goal_amount_cents INTEGER NOT NULL DEFAULT 0,
       donation_completed INTEGER NOT NULL DEFAULT 0,
       donation_completed_at TEXT,
-      monthly_xp_earned INTEGER NOT NULL DEFAULT 0,
       monthly_budget_limit_cents INTEGER,
       monthly_spent_cents INTEGER NOT NULL DEFAULT 0,
       monthly_spent_from_piggy_banks_cents INTEGER NOT NULL DEFAULT 0,
@@ -154,8 +153,7 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       required_amount_cents INTEGER NOT NULL,
       completed_amount_cents INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending',
-      completed_at TEXT,
-      xp_awarded INTEGER NOT NULL DEFAULT 0
+      completed_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS budgets (
@@ -169,27 +167,6 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS xp_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL,
-      period_id INTEGER REFERENCES monthly_periods(id),
-      reason TEXT NOT NULL,
-      xp_amount INTEGER NOT NULL,
-      related_entity_type TEXT,
-      related_entity_id INTEGER,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS achievements (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      unlocked_at TEXT,
-      condition_type TEXT NOT NULL,
-      condition_value INTEGER NOT NULL,
-      is_unlocked INTEGER NOT NULL DEFAULT 0
-    );
   `);
 
   // Seed app_settings singleton if not present
@@ -198,39 +175,4 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     VALUES (1, 'lightBrown', 'Me', datetime('now'), datetime('now'));
   `);
 
-  // Seed achievements
-  await seedAchievements(db);
-}
-
-async function seedAchievements(db: SQLite.SQLiteDatabase): Promise<void> {
-  const achievements = [
-    // Donation streaks
-    { code: 'donation_1', name: 'First Donor', description: 'Complete your first monthly donation goal.', conditionType: 'donation_streak', conditionValue: 1 },
-    { code: 'donation_3', name: 'Generous Soul', description: 'Complete donation goals 3 months in a row.', conditionType: 'donation_streak', conditionValue: 3 },
-    { code: 'donation_6', name: 'Philanthropist', description: 'Complete donation goals 6 months in a row.', conditionType: 'donation_streak', conditionValue: 6 },
-    { code: 'donation_12', name: 'Year of Giving', description: 'Complete donation goals 12 months in a row.', conditionType: 'donation_streak', conditionValue: 12 },
-    // Budget milestones
-    { code: 'budget_1', name: 'Budget Starter', description: 'Stay under your monthly budget for the first time.', conditionType: 'budget_under_count', conditionValue: 1 },
-    { code: 'budget_3', name: 'Budget Keeper', description: 'Stay under your monthly budget 3 times.', conditionType: 'budget_under_count', conditionValue: 3 },
-    { code: 'budget_6', name: 'Budget Master', description: 'Stay under your monthly budget 6 times.', conditionType: 'budget_under_count', conditionValue: 6 },
-    { code: 'budget_12', name: 'Budget Legend', description: 'Stay under your monthly budget 12 times.', conditionType: 'budget_under_count', conditionValue: 12 },
-    // Piggy bank milestones
-    { code: 'piggy_first', name: 'First Piggy', description: 'Create your first piggy bank.', conditionType: 'piggy_bank_count', conditionValue: 1 },
-    { code: 'piggy_3', name: 'Saver', description: 'Have 3 active piggy banks.', conditionType: 'piggy_bank_count', conditionValue: 3 },
-    { code: 'piggy_funded_10', name: 'Diligent Saver', description: 'Fund piggy banks 10 times total.', conditionType: 'piggy_bank_fund_count', conditionValue: 10 },
-    // Savings milestones
-    { code: 'savings_1000', name: 'First Thousand', description: 'Accumulate €1,000 in Part C all-time.', conditionType: 'part_c_all_time_cents', conditionValue: 100000 },
-    { code: 'savings_5000', name: 'Emergency Ready', description: 'Accumulate €5,000 in Part C all-time.', conditionType: 'part_c_all_time_cents', conditionValue: 500000 },
-    // XP / Level milestones
-    { code: 'level_5', name: 'Rising Star', description: 'Reach level 5.', conditionType: 'level', conditionValue: 5 },
-    { code: 'level_10', name: 'Finance Veteran', description: 'Reach level 10.', conditionType: 'level', conditionValue: 10 },
-    { code: 'level_20', name: 'Finance Legend', description: 'Reach level 20.', conditionType: 'level', conditionValue: 20 },
-  ];
-
-  for (const a of achievements) {
-    await db.execAsync(`
-      INSERT OR IGNORE INTO achievements (code, name, description, condition_type, condition_value, is_unlocked)
-      VALUES ('${a.code}', '${a.name.replace(/'/g, "''")}', '${a.description.replace(/'/g, "''")}', '${a.conditionType}', ${a.conditionValue}, 0);
-    `);
-  }
 }

@@ -4,6 +4,7 @@ import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as SQLite from 'expo-sqlite';
+import * as Font from 'expo-font';
 import { runMigrations } from '@/db/migrations';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useDbStore } from '@/stores/dbStore';
@@ -16,8 +17,17 @@ export default function RootLayout() {
   const { setTheme, setUserName } = useSettingsStore();
   const { isReady, setReady } = useDbStore();
   const [initError, setInitError] = useState<string | null>(null);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
 
   const theme = themes[themeKey];
+
+  useEffect(() => {
+    Font.loadAsync({
+      MaterialCommunityIcons: require('react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf'),
+    })
+      .catch(() => {})
+      .finally(() => setFontsLoaded(true));
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -52,7 +62,7 @@ export default function RootLayout() {
     );
   }
 
-  if (!isReady) {
+  if (!isReady || !fontsLoaded) {
     return (
       <View style={[styles.center, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />

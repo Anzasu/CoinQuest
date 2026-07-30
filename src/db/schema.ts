@@ -36,7 +36,6 @@ export const monthlyPeriods = sqliteTable('monthly_periods', {
   donationGoalAmountCents: integer('donation_goal_amount_cents').notNull().default(0),
   donationCompleted: integer('donation_completed', { mode: 'boolean' }).notNull().default(false),
   donationCompletedAt: text('donation_completed_at'),
-  monthlyXpEarned: integer('monthly_xp_earned').notNull().default(0),
   monthlyBudgetLimitCents: integer('monthly_budget_limit_cents'),
   monthlySpentCents: integer('monthly_spent_cents').notNull().default(0),
   monthlySpentFromPiggyBanksCents: integer('monthly_spent_from_piggy_banks_cents').notNull().default(0),
@@ -157,7 +156,6 @@ export const donationRecords = sqliteTable('donation_records', {
   completedAmountCents: integer('completed_amount_cents').notNull().default(0),
   status: text('status', { enum: ['pending', 'completed', 'missed'] }).notNull().default('pending'),
   completedAt: text('completed_at'),
-  xpAwarded: integer('xp_awarded').notNull().default(0),
 });
 
 // Budget: overall or per-category, per month
@@ -170,32 +168,6 @@ export const budgets = sqliteTable('budgets', {
   spentAmountCents: integer('spent_amount_cents').notNull().default(0),
   status: text('status', { enum: ['under', 'over'] }).notNull().default('under'),
   createdAt: text('created_at').notNull(),
-});
-
-// XP events — rule-based awards only
-export const xpEvents = sqliteTable('xp_events', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  date: text('date').notNull(),
-  periodId: integer('period_id').references(() => monthlyPeriods.id),
-  reason: text('reason', {
-    enum: ['donation_completed', 'budget_under', 'piggy_bank_used', 'goal_reached', 'achievement_unlocked'],
-  }).notNull(),
-  xpAmount: integer('xp_amount').notNull(),
-  relatedEntityType: text('related_entity_type'),
-  relatedEntityId: integer('related_entity_id'),
-  createdAt: text('created_at').notNull(),
-});
-
-// Achievements / badges
-export const achievements = sqliteTable('achievements', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  code: text('code').notNull().unique(),
-  name: text('name').notNull(),
-  description: text('description').notNull(),
-  unlockedAt: text('unlocked_at'),
-  conditionType: text('condition_type').notNull(),
-  conditionValue: integer('condition_value').notNull(),
-  isUnlocked: integer('is_unlocked', { mode: 'boolean' }).notNull().default(false),
 });
 
 // App settings (singleton row, id=1)

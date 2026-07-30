@@ -106,7 +106,6 @@ export function usePeriods() {
         requiredAmountCents: donationGoal,
         completedAmountCents: 0,
         status: 'pending',
-        xpAwarded: 0,
       });
 
       // Create overall budget if limit provided

@@ -20,7 +20,6 @@ export interface AppColors {
   income: string;
   expense: string;
   transfer: string;
-  xp: string;
   cardBorder: string;
   tabBar: string;
   tabBarActive: string;
@@ -62,7 +61,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#4caf50',
       expense: '#e94560',
       transfer: '#7b61ff',
-      xp: '#f5a623',
       cardBorder: '#333355',
       tabBar: '#1a1a2e',
       tabBarActive: '#e94560',
@@ -92,7 +90,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#059669',
       expense: '#dc2626',
       transfer: '#7c3aed',
-      xp: '#d97706',
       cardBorder: '#e2e8f0',
       tabBar: '#ffffff',
       tabBarActive: '#2563eb',
@@ -122,7 +119,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#4caf50',
       expense: '#d63384',
       transfer: '#c77dff',
-      xp: '#ff8fab',
       cardBorder: '#f8bbd0',
       tabBar: '#ffe4ef',
       tabBarActive: '#d63384',
@@ -152,7 +148,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#4a7c59',
       expense: '#7c5c3d',
       transfer: '#a0785a',
-      xp: '#c8a97e',
       cardBorder: '#e0cbb3',
       tabBar: '#f5ebe0',
       tabBarActive: '#7c5c3d',
@@ -182,7 +177,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#059669',
       expense: '#0369a1',
       transfer: '#6366f1',
-      xp: '#f59e0b',
       cardBorder: '#bae6fd',
       tabBar: '#e0f2fe',
       tabBarActive: '#0369a1',
@@ -212,7 +206,6 @@ export const themes: Record<ThemeKey, AppTheme> = {
       income: '#2d6a4f',
       expense: '#b91c1c',
       transfer: '#52b788',
-      xp: '#d4a017',
       cardBorder: '#b7e4c7',
       tabBar: '#d8f3dc',
       tabBarActive: '#2d6a4f',
