@@ -145,10 +145,7 @@ export default function DashboardScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={[styles.greeting, { color: theme.colors.onBackground + '88' }]}>Welcome back,</Text>
-            <Text style={[styles.name, { color: theme.colors.onBackground }]}>Anzasu</Text>
-          </View>
+          <Text style={[styles.greeting, { color: theme.colors.onBackground }]}>Welcome back</Text>
           <TouchableOpacity onPress={() => router.push('/month/list')} activeOpacity={0.7}>
           {activePeriod && (
             <Surface style={[styles.monthBadge, { backgroundColor: theme.colors.primary + '22' }]}>
@@ -326,8 +323,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingTop: 48,
   },
-  greeting: { fontSize: 14 },
-  name: { fontSize: 24, fontWeight: '800' },
+  greeting: { fontSize: 22, fontWeight: '700' },
   monthBadge: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   monthText: { fontSize: 13, fontWeight: '700' },
   section: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 12, marginBottom: 4 },
