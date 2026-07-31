@@ -251,7 +251,7 @@ export default function PartsScreen() {
           part="A"
           label="B&M Savings"
           description="Held for third party"
-          currentBalance={getPart('A')?.currentBalanceCents ?? 0}
+          currentBalance={overallInAccount.A}
           monthlyTotal={getPart('A')?.monthlyTotalCents ?? 0}
           onPress={() => setSelectedPart('A')}
           extra={[
@@ -265,7 +265,7 @@ export default function PartsScreen() {
           part="B"
           label="B&M Expenses"
           description="Held for third party"
-          currentBalance={getPart('B')?.currentBalanceCents ?? 0}
+          currentBalance={overallInAccount.B}
           monthlyTotal={getPart('B')?.monthlyTotalCents ?? 0}
           onPress={() => setSelectedPart('B')}
           extra={[
@@ -279,7 +279,7 @@ export default function PartsScreen() {
           part="C"
           label="Emergency Fund"
           description="Protected reserve"
-          currentBalance={getPart('C')?.currentBalanceCents ?? 0}
+          currentBalance={overallInAccount.C}
           monthlyTotal={getPart('C')?.monthlyTotalCents ?? 0}
           onPress={() => setSelectedPart('C')}
           extra={[
@@ -292,7 +292,7 @@ export default function PartsScreen() {
           part="D"
           label="Spending"
           description="General spending pot"
-          currentBalance={getPart('D')?.currentBalanceCents ?? 0}
+          currentBalance={overallInAccount.D}
           monthlyTotal={getPart('D')?.monthlyTotalCents ?? 0}
           onPress={() => setSelectedPart('D')}
           extra={[

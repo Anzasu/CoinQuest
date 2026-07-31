@@ -13,6 +13,7 @@ export default function NewPiggyBankScreen() {
 
   const [name, setName] = useState('');
   const [openingCash, setOpeningCash] = useState<number | null>(null);
+  const [openingAccount, setOpeningAccount] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState('');
 
@@ -28,6 +29,7 @@ export default function NewPiggyBankScreen() {
       await createPiggyBank({
         name: name.trim(),
         openingCashBalanceCents: openingCash ?? 0,
+        openingAccountBalanceCents: openingAccount ?? 0,
       });
       router.back();
     } catch (e: any) {
@@ -57,13 +59,14 @@ export default function NewPiggyBankScreen() {
         {nameError ? <Text style={{ color: theme.colors.error, fontSize: 12 }}>{nameError}</Text> : null}
 
         <Text style={[styles.hint, { color: theme.colors.onBackground + '77' }]}>
-          Opening cash balance (optional)
+          Opening balances (optional)
         </Text>
         <Text style={[styles.hintSub, { color: theme.colors.onBackground + '55' }]}>
-          If this piggy bank already has physical cash in it, enter the existing amount here.
-          This does NOT deduct anything from Part D — it's setup data only.
+          If this piggy bank already has money in it, enter the existing amounts here.
+          This does NOT deduct anything from Spending — it's setup data only.
         </Text>
         <MoneyInput label="Existing cash balance" valueCents={openingCash} onChange={setOpeningCash} />
+        <MoneyInput label="Existing on account balance" valueCents={openingAccount} onChange={setOpeningAccount} />
 
         <View style={{ height: 16 }} />
       </ScrollView>

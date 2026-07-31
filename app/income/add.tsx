@@ -36,12 +36,15 @@ export default function AddIncomeScreen() {
       let periodId = pidParam ? Number(pidParam) : null;
       if (!periodId) {
         const periods = await getAllPeriods();
-        const open = periods.find((p) => p.status === 'open');
-        if (!open) {
-          Alert.alert('No active month', 'Start a new month before adding income.');
+        const d = new Date(date);
+        const m = d.getMonth() + 1;
+        const y = d.getFullYear();
+        const matched = periods.find((p) => p.month === m && p.year === y);
+        if (!matched) {
+          Alert.alert('No period found', `There is no period for ${m}/${y}. Start that month first.`);
           return;
         }
-        periodId = open.id;
+        periodId = matched.id;
       }
 
       await addExternalIncome({

@@ -17,13 +17,13 @@ import { piggyBanks as piggyBanksTable, piggyBankTransactions } from '@/db/schem
 import { eq } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
 
-type ActionType = 'add' | 'withdraw' | 'spend' | 'transfer';
+type ActionType = 'add' | 'spend' | 'transfer';
 
 export default function PiggyBankDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useAppTheme();
   const router = useRouter();
-  const { getPiggyBank, getTransactions, removeFunds, spendFromPiggyBank, archivePiggyBank, unarchivePiggyBank, deleteTransaction, transferBetweenPiggyBanks, getAllPiggyBanks } = usePiggyBanks();
+  const { getPiggyBank, getTransactions, spendFromPiggyBank, archivePiggyBank, unarchivePiggyBank, deleteTransaction, transferBetweenPiggyBanks, getAllPiggyBanks } = usePiggyBanks();
   const { getAllPeriods } = usePeriods();
 
   const [pb, setPb] = useState<PiggyBank | null>(null);
@@ -79,14 +79,6 @@ export default function PiggyBankDetailScreen() {
           balanceType: actionBalanceType,
           note: actionNote.trim() || null,
           createdAt: nowIso(),
-        });
-      } else if (actionDialog === 'withdraw') {
-        await removeFunds({
-          piggyBankId: pbId,
-          amountCents: actionAmount,
-          balanceType: actionBalanceType,
-          date: todayIso(),
-          note: actionNote.trim() || undefined,
         });
       } else if (actionDialog === 'spend') {
         await spendFromPiggyBank({
@@ -164,7 +156,6 @@ export default function PiggyBankDetailScreen() {
 
   const ACTION_TITLES: Record<ActionType, string> = {
     add: 'Add funds',
-    withdraw: 'Withdraw funds',
     spend: 'Spend from piggy bank',
     transfer: 'Transfer to another piggy bank',
   };
@@ -218,9 +209,6 @@ export default function PiggyBankDetailScreen() {
               <Button mode="contained" icon="plus" onPress={() => setActionDialog('add')} style={{ flex: 1 }} buttonColor={theme.custom.income}>
                 Add
               </Button>
-              <Button mode="contained-tonal" icon="cash-minus" onPress={() => setActionDialog('withdraw')} style={{ flex: 1 }}>
-                Withdraw
-              </Button>
               <Button mode="contained" icon="cart" onPress={() => setActionDialog('spend')} style={{ flex: 1 }}>
                 Spend
               </Button>
@@ -242,7 +230,7 @@ export default function PiggyBankDetailScreen() {
             <Surface key={t.id} style={[styles.txnRow, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
               <View style={styles.txnContent}>
                 <Text style={[styles.txnType, { color: theme.colors.onSurface }]}>
-                  {t.type === 'add' ? '↓ Added' : t.type === 'remove' ? '↑ Withdrawn' : '💸 Spent'}
+                  {t.type === 'add' ? '↓ Added' : t.type === 'remove' ? '↑ Removed' : '💸 Spent'}
                   {' · '}{t.balanceType}
                 </Text>
                 <Text style={[styles.txnMeta, { color: theme.colors.onSurface + '66' }]}>
@@ -260,7 +248,7 @@ export default function PiggyBankDetailScreen() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Add / Withdraw / Spend / Transfer dialog */}
+      {/* Add / Return / Spend / Transfer dialog */}
       <Portal>
         <Dialog visible={!!actionDialog} onDismiss={() => { setActionDialog(null); setTransferTargetId(null); }}>
           <Dialog.Title>{actionDialog ? ACTION_TITLES[actionDialog] : ''}</Dialog.Title>

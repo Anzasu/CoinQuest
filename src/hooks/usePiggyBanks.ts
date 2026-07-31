@@ -28,18 +28,19 @@ export function usePiggyBanks() {
   const createPiggyBank = useCallback(async (params: {
     name: string;
     openingCashBalanceCents: number;
+    openingAccountBalanceCents?: number;
   }): Promise<PiggyBank> => {
+    const openingAccount = params.openingAccountBalanceCents ?? 0;
     const [pb] = await db
       .insert(piggyBanks)
       .values({
         name: params.name,
         openingCashBalanceCents: params.openingCashBalanceCents,
-        // Opening cash goes directly into balanceCash — does NOT reduce Part D
         balanceCashCents: params.openingCashBalanceCents,
+        balanceOnAccountCents: openingAccount,
         totalAddedAllTimeCents: 0,
         totalRemovedAllTimeCents: 0,
         totalSpentAllTimeCents: 0,
-        balanceOnAccountCents: 0,
         isArchived: false,
         createdAt: nowIso(),
       })
@@ -54,6 +55,19 @@ export function usePiggyBanks() {
         type: 'add',
         balanceType: 'cash',
         note: 'Opening cash balance (pre-app)',
+        createdAt: nowIso(),
+      });
+    }
+
+    // Record the opening account balance as a setup transaction if non-zero
+    if (openingAccount > 0) {
+      await db.insert(piggyBankTransactions).values({
+        piggyBankId: pb.id,
+        date: pb.createdAt.split('T')[0],
+        amountCents: openingAccount,
+        type: 'add',
+        balanceType: 'account',
+        note: 'Opening account balance (pre-app)',
         createdAt: nowIso(),
       });
     }
@@ -128,11 +142,11 @@ export function usePiggyBanks() {
   }, []);
 
   /**
-   * Remove money from a piggy bank (type='remove': take back to Part D or general use).
-   * This does NOT create an expense — it just reduces the piggy bank balance.
+   * Return money from a piggy bank back to Spending (Part D).
    */
-  const removeFunds = useCallback(async (params: {
+  const returnToSpending = useCallback(async (params: {
     piggyBankId: number;
+    periodId: number;
     amountCents: number;
     balanceType: 'account' | 'cash';
     date: string;
@@ -157,9 +171,21 @@ export function usePiggyBanks() {
       amountCents: params.amountCents,
       type: 'remove',
       balanceType: params.balanceType,
-      note: params.note ?? null,
+      note: params.note ?? `Returned to Spending`,
       createdAt: nowIso(),
     });
+
+    // Return money to Part D balance
+    const { ledgerParts } = await import('@/db/schema');
+    const { and: andI, eq: eqI } = await import('drizzle-orm');
+    const parts = await db.select().from(ledgerParts).where(
+      andI(eqI(ledgerParts.periodId, params.periodId), eqI(ledgerParts.partType, 'D'))
+    );
+    if (parts[0]) {
+      await db.update(ledgerParts).set({
+        currentBalanceCents: parts[0].currentBalanceCents + params.amountCents,
+      }).where(eqI(ledgerParts.id, parts[0].id));
+    }
   }, []);
 
   /**
@@ -257,7 +283,7 @@ export function usePiggyBanks() {
     updatePiggyBank,
     archivePiggyBank,
     unarchivePiggyBank,
-    removeFunds,
+    returnToSpending,
     spendFromPiggyBank,
     deleteTransaction,
     transferBetweenPiggyBanks,
