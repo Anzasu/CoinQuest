@@ -84,6 +84,49 @@ export function usePiggyBanks() {
     await db.update(piggyBanks).set({ isArchived: true }).where(eq(piggyBanks.id, id));
   }, []);
 
+  const unarchivePiggyBank = useCallback(async (id: number): Promise<void> => {
+    await db.update(piggyBanks).set({ isArchived: false }).where(eq(piggyBanks.id, id));
+  }, []);
+
+  const deleteTransaction = useCallback(async (txnId: number): Promise<void> => {
+    const [txn] = await db.select().from(piggyBankTransactions).where(eq(piggyBankTransactions.id, txnId));
+    if (!txn) return;
+    const [pb] = await db.select().from(piggyBanks).where(eq(piggyBanks.id, txn.piggyBankId));
+    if (!pb) return;
+    const isAccount = txn.balanceType === 'account';
+    const currentBal = isAccount ? pb.balanceOnAccountCents : pb.balanceCashCents;
+
+    if (txn.type === 'add') {
+      await db.update(piggyBanks).set({
+        [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal - txn.amountCents,
+        totalAddedAllTimeCents: pb.totalAddedAllTimeCents - txn.amountCents,
+      }).where(eq(piggyBanks.id, pb.id));
+    } else if (txn.type === 'remove') {
+      await db.update(piggyBanks).set({
+        [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal + txn.amountCents,
+        totalRemovedAllTimeCents: pb.totalRemovedAllTimeCents - txn.amountCents,
+      }).where(eq(piggyBanks.id, pb.id));
+    } else if (txn.type === 'spend') {
+      await db.update(piggyBanks).set({
+        [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal + txn.amountCents,
+        totalSpentAllTimeCents: pb.totalSpentAllTimeCents - txn.amountCents,
+      }).where(eq(piggyBanks.id, pb.id));
+      const { monthlyPeriods } = await import('@/db/schema');
+      const { and: andI, eq: eqI } = await import('drizzle-orm');
+      const d = new Date(txn.date);
+      const periods = await db.select().from(monthlyPeriods).where(
+        andI(eqI(monthlyPeriods.month, d.getMonth() + 1), eqI(monthlyPeriods.year, d.getFullYear()))
+      );
+      if (periods[0] && periods[0].monthlySpentFromPiggyBanksCents > 0) {
+        await db.update(monthlyPeriods).set({
+          monthlySpentFromPiggyBanksCents: periods[0].monthlySpentFromPiggyBanksCents - txn.amountCents,
+        }).where(eqI(monthlyPeriods.id, periods[0].id));
+      }
+    }
+
+    await db.delete(piggyBankTransactions).where(eq(piggyBankTransactions.id, txnId));
+  }, []);
+
   /**
    * Remove money from a piggy bank (type='remove': take back to Part D or general use).
    * This does NOT create an expense — it just reduces the piggy bank balance.
@@ -176,6 +219,36 @@ export function usePiggyBanks() {
     }
   }, []);
 
+  const transferBetweenPiggyBanks = useCallback(async (params: {
+    fromId: number;
+    toId: number;
+    amountCents: number;
+    balanceType: 'account' | 'cash';
+    date: string;
+    note?: string;
+  }): Promise<void> => {
+    const [from] = await db.select().from(piggyBanks).where(eq(piggyBanks.id, params.fromId));
+    const [to] = await db.select().from(piggyBanks).where(eq(piggyBanks.id, params.toId));
+    if (!from || !to) return;
+    const isAccount = params.balanceType === 'account';
+    const fromBal = isAccount ? from.balanceOnAccountCents : from.balanceCashCents;
+    const toBal = isAccount ? to.balanceOnAccountCents : to.balanceCashCents;
+    await db.update(piggyBanks).set({
+      [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: fromBal - params.amountCents,
+      totalRemovedAllTimeCents: from.totalRemovedAllTimeCents + params.amountCents,
+    }).where(eq(piggyBanks.id, params.fromId));
+    await db.update(piggyBanks).set({
+      [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: toBal + params.amountCents,
+      totalAddedAllTimeCents: to.totalAddedAllTimeCents + params.amountCents,
+    }).where(eq(piggyBanks.id, params.toId));
+    const noteFrom = `Transfer to ${to.name}${params.note ? ` · ${params.note}` : ''}`;
+    const noteTo = `Transfer from ${from.name}${params.note ? ` · ${params.note}` : ''}`;
+    await db.insert(piggyBankTransactions).values([
+      { piggyBankId: params.fromId, date: params.date, amountCents: params.amountCents, type: 'remove', balanceType: params.balanceType, note: noteFrom, createdAt: nowIso() },
+      { piggyBankId: params.toId, date: params.date, amountCents: params.amountCents, type: 'add', balanceType: params.balanceType, note: noteTo, createdAt: nowIso() },
+    ]);
+  }, []);
+
   return {
     getAllPiggyBanks,
     getPiggyBank,
@@ -183,7 +256,10 @@ export function usePiggyBanks() {
     createPiggyBank,
     updatePiggyBank,
     archivePiggyBank,
+    unarchivePiggyBank,
     removeFunds,
     spendFromPiggyBank,
+    deleteTransaction,
+    transferBetweenPiggyBanks,
   };
 }

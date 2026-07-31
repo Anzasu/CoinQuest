@@ -45,10 +45,10 @@ export default function MoreScreen() {
         <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>MANAGE</Text>
 
         <MenuRow
-          icon="calendar-month"
-          label="Monthly Periods"
+          icon="calendar-plus"
+          label="Start New Month"
           theme={theme}
-          onPress={() => router.push('/month/list')}
+          onPress={() => router.push('/month/new')}
         />
         <MenuRow
           icon="receipt"

@@ -1,6 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Appbar, FAB, Surface, Switch, IconButton, TextInput } from 'react-native-paper';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, ScrollView, StyleSheet, Alert, TextInput as RNTextInput } from 'react-native';
+import { Text, Appbar, FAB, Surface, Switch, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Dialog, Portal, Button } from 'react-native-paper';
@@ -18,9 +18,9 @@ export default function BillsListScreen() {
   const [templates, setTemplates] = useState<BillTemplate[]>([]);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [name, setName] = useState('');
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const nameRef = useRef('');
 
   useFocusEffect(
     useCallback(() => {
@@ -30,20 +30,21 @@ export default function BillsListScreen() {
 
   function openAdd() {
     setEditId(null);
-    setName('');
+    nameRef.current = '';
     setAmountCents(null);
     setDialogVisible(true);
   }
 
   function openEdit(t: BillTemplate) {
     setEditId(t.id);
-    setName(t.name);
+    nameRef.current = t.name;
     setAmountCents(t.amountCents);
     setDialogVisible(true);
   }
 
   async function handleSave() {
-    if (!name.trim() || !amountCents || amountCents <= 0) return;
+    const name = nameRef.current.trim();
+    if (!name || !amountCents || amountCents <= 0) return;
     setSaving(true);
     try {
       if (editId) {
@@ -107,12 +108,26 @@ export default function BillsListScreen() {
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
           <Dialog.Title>{editId ? 'Edit Bill' : 'Add Bill'}</Dialog.Title>
           <Dialog.Content style={{ gap: 12 }}>
-            <TextInput label="Bill name" value={name} onChangeText={setName} mode="outlined" style={{ backgroundColor: theme.colors.surface }} />
+            <RNTextInput
+              defaultValue={nameRef.current}
+              onChangeText={(t) => { nameRef.current = t; }}
+              placeholder="Bill name"
+              placeholderTextColor={theme.colors.onSurface + '55'}
+              style={{
+                borderWidth: 1,
+                borderColor: theme.custom.cardBorder,
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+                color: theme.colors.onSurface,
+                backgroundColor: theme.colors.surface,
+              }}
+            />
             <MoneyInput label="Monthly amount" valueCents={amountCents} onChange={setAmountCents} />
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDialogVisible(false)}>Cancel</Button>
-            <Button onPress={handleSave} loading={saving} disabled={saving || !name.trim() || !amountCents}>Save</Button>
+            <Button onPress={handleSave} loading={saving} disabled={saving || !amountCents}>Save</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

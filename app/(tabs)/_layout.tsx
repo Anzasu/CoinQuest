@@ -14,7 +14,7 @@ export default function TabLayout() {
           backgroundColor: theme.custom.tabBar,
           borderTopColor: theme.custom.cardBorder,
           borderTopWidth: 1,
-          height: 64,
+          height: 70,
           paddingBottom: 8,
         },
         tabBarActiveTintColor: theme.custom.tabBarActive,

@@ -41,13 +41,21 @@ export default function PartsScreen() {
   const [parts, setParts] = useState<LedgerPart[]>([]);
   const [legacyTotals, setLegacyTotals] = useState<Record<string, number>>({});
   const [allTimeTotals, setAllTimeTotals] = useState<Record<PartKey, number>>({ A: 0, B: 0, C: 0, D: 0 });
+  const [overallInAccount, setOverallInAccount] = useState<Record<PartKey, number>>({ A: 0, B: 0, C: 0, D: 0 });
   const [selectedPart, setSelectedPart] = useState<PartKey | null>(null);
 
   useFocusEffect(
     useCallback(() => {
+      setSelectedPart(null);
       async function load() {
         const periods = await getAllPeriods();
-        const open = periods.find((p) => p.status === 'open') ?? periods[0] ?? null;
+        const now = new Date();
+        const curMonth = now.getMonth() + 1;
+        const curYear = now.getFullYear();
+        const open = periods.find((p) => p.month === curMonth && p.year === curYear)
+          ?? periods.find((p) => p.status === 'open')
+          ?? periods[0]
+          ?? null;
         setActivePeriod(open);
         if (open) {
           const p = await getLedgerParts(open.id);
@@ -66,6 +74,18 @@ export default function PartsScreen() {
           totals[k] = (totals[k] ?? 0) + (lt[k] ?? 0);
         }
         setAllTimeTotals(totals);
+
+        // Overall in account per part: all months + legacy - spent - transferred - withdrawn
+        const oia: Record<PartKey, number> = { A: 0, B: 0, C: 0, D: 0 };
+        for (const k of ['A', 'B', 'C', 'D'] as PartKey[]) {
+          const rows = allRows.filter((r) => r.partType === k);
+          const overall = rows.reduce((s, r) => s + r.monthlyTotalCents, 0) + (lt[k] ?? 0);
+          const spent = rows.reduce((s, r) => s + r.spentAmountCents, 0);
+          const transferred = rows.reduce((s, r) => s + r.transferredOutAmountCents, 0);
+          const withdrawn = rows.reduce((s, r) => s + r.withdrawnCashAmountCents, 0);
+          oia[k] = overall - spent - transferred - withdrawn;
+        }
+        setOverallInAccount(oia);
       }
       load();
     }, []),
@@ -108,11 +128,11 @@ export default function PartsScreen() {
             <Text style={[styles.partDesc, { color: theme.colors.onBackground + '77' }]}>{PART_DESCRIPTIONS[selectedPart]}</Text>
           </View>
 
-          {/* Monthly balance card */}
+          {/* Overall in account card */}
           <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>THIS MONTH</Text>
           <Surface style={[styles.balanceCard, { backgroundColor: theme.colors.surface, borderColor: color + '44' }]}>
-            <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Current balance</Text>
-            <Text style={[styles.balanceBig, { color }]}>{formatCents(part?.currentBalanceCents ?? 0)}</Text>
+            <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Overall in account</Text>
+            <Text style={[styles.balanceBig, { color }]}>{formatCents(overallInAccount[selectedPart] ?? 0)}</Text>
             <View style={styles.statRow}>
               <StatBox label="Started with" value={part?.monthlyTotalCents ?? 0} theme={theme} />
               {(selectedPart === 'A' || selectedPart === 'B') && (
@@ -213,6 +233,19 @@ export default function PartsScreen() {
           </Text>
         </View>
 
+        {/* Salary split summary */}
+        <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>MONTH SUMMARY</Text>
+        <View style={[styles.summaryBox, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
+          <Row label="Salary" value={activePeriod.salaryAmountCents} theme={theme} />
+          <Row label="Bills deducted" value={-activePeriod.totalBillsAmountCents} theme={theme} negative />
+          <View style={[styles.divider, { backgroundColor: theme.custom.cardBorder }]} />
+          <Row label="After bills" value={activePeriod.remainingAfterBillsCents} theme={theme} />
+          <Row label="B&M Savings (25%)" value={activePeriod.partAAmountCents} theme={theme} color={theme.custom.partA} />
+          <Row label="B&M Expenses (25%)" value={activePeriod.partBAmountCents} theme={theme} color={theme.custom.partB} />
+          <Row label="Emergency Fund (25%)" value={activePeriod.partCAmountCents} theme={theme} color={theme.custom.partC} />
+          <Row label="Spending (25%)" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
+        </View>
+
         <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>B&M SAVINGS</Text>
         <PartCard
           part="A"
@@ -267,19 +300,6 @@ export default function PartsScreen() {
             { label: 'Cash withdrawn', value: getPart('D')?.withdrawnCashAmountCents ?? 0 },
           ]}
         />
-
-        {/* Salary split summary */}
-        <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>MONTH SUMMARY</Text>
-        <View style={[styles.summaryBox, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
-          <Row label="Salary" value={activePeriod.salaryAmountCents} theme={theme} />
-          <Row label="Bills deducted" value={-activePeriod.totalBillsAmountCents} theme={theme} negative />
-          <View style={[styles.divider, { backgroundColor: theme.custom.cardBorder }]} />
-          <Row label="After bills" value={activePeriod.remainingAfterBillsCents} theme={theme} />
-          <Row label="B&M Savings (25%)" value={activePeriod.partAAmountCents} theme={theme} color={theme.custom.partA} />
-          <Row label="B&M Expenses (25%)" value={activePeriod.partBAmountCents} theme={theme} color={theme.custom.partB} />
-          <Row label="Emergency Fund (25%)" value={activePeriod.partCAmountCents} theme={theme} color={theme.custom.partC} />
-          <Row label="Spending (25%)" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
-        </View>
 
         <View style={{ height: 24 }} />
       </ScrollView>

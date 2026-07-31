@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Appbar, Button, Surface, SegmentedButtons, Dialog, Portal, TextInput } from 'react-native-paper';
+import { Text, Appbar, Button, Surface, SegmentedButtons, Dialog, Portal } from 'react-native-paper';
+import { TextInput as RNTextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -16,23 +17,27 @@ import { piggyBanks as piggyBanksTable, piggyBankTransactions } from '@/db/schem
 import { eq } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
 
-type ActionType = 'add' | 'withdraw' | 'spend';
+type ActionType = 'add' | 'withdraw' | 'spend' | 'transfer';
 
 export default function PiggyBankDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useAppTheme();
   const router = useRouter();
-  const { getPiggyBank, getTransactions, removeFunds, spendFromPiggyBank, archivePiggyBank } = usePiggyBanks();
+  const { getPiggyBank, getTransactions, removeFunds, spendFromPiggyBank, archivePiggyBank, unarchivePiggyBank, deleteTransaction, transferBetweenPiggyBanks, getAllPiggyBanks } = usePiggyBanks();
   const { getAllPeriods } = usePeriods();
 
   const [pb, setPb] = useState<PiggyBank | null>(null);
+  const [allBanks, setAllBanks] = useState<PiggyBank[]>([]);
   const [transactions, setTransactions] = useState<PiggyBankTransaction[]>([]);
   const [actionDialog, setActionDialog] = useState<ActionType | null>(null);
   const [actionAmount, setActionAmount] = useState<number | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [actionBalanceType, setActionBalanceType] = useState<'account' | 'cash'>('account');
+  const [transferTargetId, setTransferTargetId] = useState<number | null>(null);
   const [archiveDialog, setArchiveDialog] = useState(false);
+  const [unarchiveDialog, setUnarchiveDialog] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
+  const [revertTxnId, setRevertTxnId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const pbId = Number(id);
@@ -42,23 +47,25 @@ export default function PiggyBankDetailScreen() {
     setPb(bank ?? null);
     const txns = await getTransactions(pbId);
     setTransactions(txns);
+    const banks = await getAllPiggyBanks();
+    setAllBanks(banks.filter((b) => b.id !== pbId && !b.isArchived));
   }
 
   useFocusEffect(useCallback(() => { reload(); }, [pbId]));
-
-  // Can delete if no real funds have been added (only opening cash)
-  const canDelete = pb != null && pb.totalAddedAllTimeCents === 0 && pb.totalSpentAllTimeCents === 0 && pb.totalRemovedAllTimeCents === 0;
 
   async function handleAction() {
     if (!actionAmount || actionAmount <= 0 || !pb) return;
     setSaving(true);
     try {
       const periods = await getAllPeriods();
-      const open = periods.find((p) => p.status === 'open') ?? periods[0];
+      const now = new Date();
+      const curMonth = now.getMonth() + 1;
+      const curYear = now.getFullYear();
+      const open = periods.find((p) => p.month === curMonth && p.year === curYear)
+        ?? periods.find((p) => p.status === 'open')
+        ?? periods[0];
 
       if (actionDialog === 'add') {
-        // Add funds directly to piggy bank (no Part D deduction — that is done via transfers/add DtoPiggyBank)
-        // This "add" is for recording cash added directly (e.g. cash from wallet)
         await db.update(piggyBanksTable).set({
           totalAddedAllTimeCents: pb.totalAddedAllTimeCents + actionAmount,
           balanceCashCents: actionBalanceType === 'cash' ? pb.balanceCashCents + actionAmount : pb.balanceCashCents,
@@ -90,12 +97,27 @@ export default function PiggyBankDetailScreen() {
           date: todayIso(),
           note: actionNote.trim() || undefined,
         });
+      } else if (actionDialog === 'transfer') {
+        if (!transferTargetId) {
+          Alert.alert('Select a target piggy bank');
+          setSaving(false);
+          return;
+        }
+        await transferBetweenPiggyBanks({
+          fromId: pbId,
+          toId: transferTargetId,
+          amountCents: actionAmount,
+          balanceType: actionBalanceType,
+          date: todayIso(),
+          note: actionNote.trim() || undefined,
+        });
       }
 
       await reload();
       setActionDialog(null);
       setActionAmount(null);
       setActionNote('');
+      setTransferTargetId(null);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -103,10 +125,30 @@ export default function PiggyBankDetailScreen() {
     }
   }
 
+  async function handleRevert() {
+    if (!revertTxnId) return;
+    setSaving(true);
+    try {
+      await deleteTransaction(revertTxnId);
+      await reload();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSaving(false);
+      setRevertTxnId(null);
+    }
+  }
+
   async function handleArchive() {
     await archivePiggyBank(pbId);
     setArchiveDialog(false);
-    router.back();
+    await reload();
+  }
+
+  async function handleUnarchive() {
+    await unarchivePiggyBank(pbId);
+    setUnarchiveDialog(false);
+    await reload();
   }
 
   async function handleDelete() {
@@ -124,7 +166,10 @@ export default function PiggyBankDetailScreen() {
     add: 'Add funds',
     withdraw: 'Withdraw funds',
     spend: 'Spend from piggy bank',
+    transfer: 'Transfer to another piggy bank',
   };
+
+  const revertTxn = revertTxnId != null ? transactions.find((t) => t.id === revertTxnId) : null;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -134,9 +179,10 @@ export default function PiggyBankDetailScreen() {
         {!pb.isArchived && (
           <Appbar.Action icon="archive" onPress={() => setArchiveDialog(true)} color={theme.colors.primary} />
         )}
-        {canDelete && (
-          <Appbar.Action icon="delete" onPress={() => setDeleteDialog(true)} color={theme.colors.error} />
+        {pb.isArchived && (
+          <Appbar.Action icon="archive-off" onPress={() => setUnarchiveDialog(true)} color={theme.colors.primary} />
         )}
+        <Appbar.Action icon="delete" onPress={() => setDeleteDialog(true)} color={theme.colors.error} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -179,13 +225,11 @@ export default function PiggyBankDetailScreen() {
                 Spend
               </Button>
             </View>
-            <View style={[styles.helpRow, { backgroundColor: theme.colors.surfaceVariant, borderRadius: 8, padding: 10 }]}>
-              <Text style={[styles.helpText, { color: theme.colors.onSurface + '88' }]}>
-                <Text style={{ fontWeight: '700' }}>Add</Text> — record cash or card added to this piggy bank.{'\n'}
-                <Text style={{ fontWeight: '700' }}>Withdraw</Text> — take money back out (no spending recorded).{'\n'}
-                <Text style={{ fontWeight: '700' }}>Spend</Text> — buy something using piggy bank funds.
-              </Text>
-            </View>
+            {allBanks.length > 0 && (
+              <Button mode="outlined" icon="bank-transfer" onPress={() => setActionDialog('transfer')} style={{ marginTop: 4 }}>
+                Transfer to another piggy bank
+              </Button>
+            )}
           </>
         )}
 
@@ -208,6 +252,7 @@ export default function PiggyBankDetailScreen() {
               <Text style={[styles.txnAmount, { color: t.type === 'add' ? theme.custom.income : theme.colors.error }]}>
                 {t.type === 'add' ? '+' : '-'}{formatCents(t.amountCents)}
               </Text>
+              <Text style={[styles.deleteBtn, { color: theme.colors.error + '88' }]} onPress={() => setRevertTxnId(t.id)}>✕</Text>
             </Surface>
           ))
         )}
@@ -215,12 +260,27 @@ export default function PiggyBankDetailScreen() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Add / Withdraw / Spend dialog */}
+      {/* Add / Withdraw / Spend / Transfer dialog */}
       <Portal>
-        <Dialog visible={!!actionDialog} onDismiss={() => setActionDialog(null)}>
+        <Dialog visible={!!actionDialog} onDismiss={() => { setActionDialog(null); setTransferTargetId(null); }}>
           <Dialog.Title>{actionDialog ? ACTION_TITLES[actionDialog] : ''}</Dialog.Title>
           <Dialog.Content style={{ gap: 12 }}>
             <MoneyInput label="Amount" valueCents={actionAmount} onChange={setActionAmount} />
+            {actionDialog === 'transfer' ? (
+              <>
+                <Text style={{ color: theme.colors.onSurface + '77', fontSize: 13 }}>Transfer to</Text>
+                {allBanks.map((b) => (
+                  <Button
+                    key={b.id}
+                    mode={transferTargetId === b.id ? 'contained' : 'outlined'}
+                    onPress={() => setTransferTargetId(b.id)}
+                    style={{ marginBottom: 4 }}
+                  >
+                    {b.name}
+                  </Button>
+                ))}
+              </>
+            ) : null}
             <Text style={{ color: theme.colors.onSurface + '77', fontSize: 13 }}>
               {actionDialog === 'add' ? 'How was it added?' : 'Balance source'}
             </Text>
@@ -232,17 +292,25 @@ export default function PiggyBankDetailScreen() {
                 { value: 'cash', label: 'Cash' },
               ]}
             />
-            <TextInput
-              label="Note (optional)"
+            <RNTextInput
               value={actionNote}
               onChangeText={setActionNote}
-              mode="outlined"
-              style={{ backgroundColor: theme.colors.surface }}
+              placeholder="Note (optional)"
+              placeholderTextColor={theme.colors.onSurface + '55'}
+              style={{
+                borderWidth: 1,
+                borderColor: theme.custom.cardBorder,
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+                color: theme.colors.onSurface,
+                backgroundColor: theme.colors.surface,
+              }}
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setActionDialog(null)}>Cancel</Button>
-            <Button onPress={handleAction} loading={saving} disabled={saving || !actionAmount}>
+            <Button onPress={() => { setActionDialog(null); setTransferTargetId(null); }}>Cancel</Button>
+            <Button onPress={handleAction} loading={saving} disabled={saving || !actionAmount || (actionDialog === 'transfer' && !transferTargetId)}>
               Confirm
             </Button>
           </Dialog.Actions>
@@ -250,18 +318,36 @@ export default function PiggyBankDetailScreen() {
       </Portal>
 
       <ConfirmDialog
+        visible={revertTxnId != null}
+        title="Revert transaction?"
+        message={revertTxn ? `Revert ${revertTxn.type} of ${formatCents(revertTxn.amountCents)}? This will undo the balance change.` : ''}
+        confirmLabel="Revert"
+        onConfirm={handleRevert}
+        onCancel={() => setRevertTxnId(null)}
+      />
+
+      <ConfirmDialog
         visible={archiveDialog}
         title="Archive piggy bank?"
-        message={`Archive "${pb.name}"? You can still view it but cannot add more funds.`}
+        message={`Archive "${pb.name}"? You can unarchive it at any time.`}
         confirmLabel="Archive"
         onConfirm={handleArchive}
         onCancel={() => setArchiveDialog(false)}
       />
 
       <ConfirmDialog
+        visible={unarchiveDialog}
+        title="Unarchive piggy bank?"
+        message={`Restore "${pb.name}" to active status?`}
+        confirmLabel="Unarchive"
+        onConfirm={handleUnarchive}
+        onCancel={() => setUnarchiveDialog(false)}
+      />
+
+      <ConfirmDialog
         visible={deleteDialog}
         title="Delete piggy bank?"
-        message={`Delete "${pb.name}"? This cannot be undone. Only allowed because no funds have been added yet.`}
+        message={`Permanently delete "${pb.name}" and all its transactions? This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={handleDelete}
         onCancel={() => setDeleteDialog(false)}
@@ -281,11 +367,10 @@ const styles = StyleSheet.create({
   metaValue: { fontSize: 14, fontWeight: '700' },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 8 },
   actions: { flexDirection: 'row', gap: 8 },
-  helpRow: { marginTop: 4 },
-  helpText: { fontSize: 12, lineHeight: 18 },
   txnRow: { borderRadius: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   txnContent: { flex: 1 },
   txnType: { fontSize: 14, fontWeight: '600' },
   txnMeta: { fontSize: 12, marginTop: 2 },
   txnAmount: { fontSize: 14, fontWeight: '700' },
+  deleteBtn: { fontSize: 18, paddingHorizontal: 4 },
 });

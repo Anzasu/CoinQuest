@@ -29,7 +29,11 @@ export default function NewMonthScreen() {
   const { startNewMonth, getPeriodByMonthYear } = usePeriods();
   const { getActiveTemplates } = useBills();
 
-  const { month, year } = currentMonth();
+  const now = currentMonth();
+  const nextM = now.month === 12 ? 1 : now.month + 1;
+  const nextY = now.month === 12 ? now.year + 1 : now.year;
+  const [targetMonth] = useState(nextM);
+  const [targetYear] = useState(nextY);
   const [step, setStep] = useState<Step>('salary');
   const [salary, setSalary] = useState<number | null>(null);
   const [salaryError, setSalaryError] = useState('');
@@ -39,12 +43,12 @@ export default function NewMonthScreen() {
 
   useEffect(() => {
     async function load() {
-      // Check if month already exists
-      const existing = await getPeriodByMonthYear(month, year);
+      // Block if next month already exists
+      const existing = await getPeriodByMonthYear(targetMonth, targetYear);
       if (existing) {
         Alert.alert(
           'Month already exists',
-          `${formatMonthYear(month, year)} already has a period. You can find it in the Months list.`,
+          `${formatMonthYear(targetMonth, targetYear)} already has a period. You can find it in the Monthly Periods list.`,
           [{ text: 'OK', onPress: () => router.back() }],
         );
         return;
@@ -125,8 +129,8 @@ export default function NewMonthScreen() {
     setSaving(true);
     try {
       await startNewMonth({
-        month,
-        year,
+        month: targetMonth,
+        year: targetYear,
         salaryAmountCents: salary,
         bills: bills
           .filter((b) => b.amountCents != null && b.amountCents > 0)
@@ -149,7 +153,7 @@ export default function NewMonthScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title={`Start ${formatMonthYear(month, year)}`} />
+        <Appbar.Content title={`Start ${formatMonthYear(targetMonth, targetYear)}`} />
       </Appbar.Header>
 
       {/* Step indicator */}
@@ -172,7 +176,7 @@ export default function NewMonthScreen() {
           <View style={styles.form}>
             <Text style={[styles.formTitle, { color: theme.colors.onBackground }]}>Enter your salary</Text>
             <Text style={[styles.formSub, { color: theme.colors.onBackground + '77' }]}>
-              Net salary after tax for {formatMonthYear(month, year)}.
+              Net salary after tax for {formatMonthYear(targetMonth, targetYear)}.
             </Text>
             <MoneyInput label="Salary" valueCents={salary} onChange={setSalary} error={salaryError} />
             <Divider style={{ marginVertical: 16 }} />
@@ -236,10 +240,10 @@ export default function NewMonthScreen() {
             <Divider style={{ marginVertical: 8 }} />
             <PreviewRow label="Remaining after bills" value={remaining} color={theme.colors.onBackground} theme={theme} />
             <Divider style={{ marginVertical: 4 }} />
-            <PreviewRow label="Part A (25%)" value={split.partA} color={theme.custom.partA} theme={theme} />
-            <PreviewRow label="Part B (25%)" value={split.partB} color={theme.custom.partB} theme={theme} />
-            <PreviewRow label="Part C (25%)" value={split.partC} color={theme.custom.partC} theme={theme} />
-            <PreviewRow label="Part D (25%)" value={split.partD} color={theme.custom.partD} theme={theme} />
+            <PreviewRow label="B&M Savings (25%)" value={split.partA} color={theme.custom.partA} theme={theme} />
+            <PreviewRow label="B&M Expenses (25%)" value={split.partB} color={theme.custom.partB} theme={theme} />
+            <PreviewRow label="Emergency Fund (25%)" value={split.partC} color={theme.custom.partC} theme={theme} />
+            <PreviewRow label="Spending (25%)" value={split.partD} color={theme.custom.partD} theme={theme} />
             <Divider style={{ marginVertical: 8 }} />
             <PreviewRow label="Donation goal (25% of D)" value={donationGoal} color={theme.colors.secondary} theme={theme} />
             {budgetCents != null && (

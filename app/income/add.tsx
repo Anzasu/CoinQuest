@@ -99,7 +99,7 @@ export default function AddIncomeScreen() {
         />
 
         <Text style={[styles.hint, { color: theme.colors.onBackground + '66' }]}>
-          External income goes directly to Part D and increases its available balance. It is NOT split into A/B/C/D.
+          External income goes directly to Spending and increases its available balance. It is NOT split into B&M Savings/Expenses/Emergency Fund/Spending.
         </Text>
         <View style={{ height: 16 }} />
       </ScrollView>

@@ -12,13 +12,13 @@ import { todayIso } from '@/lib/dates';
 type TransferType = 'AtoExternal' | 'BtoExternal' | 'ACashWithdrawal' | 'BCashWithdrawal' | 'CCashWithdrawal' | 'DCashWithdrawal' | 'DtoPiggyBank';
 
 const TRANSFER_OPTIONS: { value: TransferType; label: string; part: 'A' | 'B' | 'C' | 'D' }[] = [
-  { value: 'AtoExternal', label: 'Part A → Transfer out', part: 'A' },
-  { value: 'BtoExternal', label: 'Part B → Transfer out', part: 'B' },
-  { value: 'ACashWithdrawal', label: 'Part A → Cash withdrawal', part: 'A' },
-  { value: 'BCashWithdrawal', label: 'Part B → Cash withdrawal', part: 'B' },
-  { value: 'CCashWithdrawal', label: 'Part C → Cash withdrawal', part: 'C' },
-  { value: 'DCashWithdrawal', label: 'Part D → Cash withdrawal', part: 'D' },
-  { value: 'DtoPiggyBank', label: 'Part D → Piggy Bank', part: 'D' },
+  { value: 'AtoExternal', label: 'B&M Savings → Transfer out', part: 'A' },
+  { value: 'BtoExternal', label: 'B&M Expenses → Transfer out', part: 'B' },
+  { value: 'ACashWithdrawal', label: 'B&M Savings → Cash withdrawal', part: 'A' },
+  { value: 'BCashWithdrawal', label: 'B&M Expenses → Cash withdrawal', part: 'B' },
+  { value: 'CCashWithdrawal', label: 'Emergency Fund → Cash withdrawal', part: 'C' },
+  { value: 'DCashWithdrawal', label: 'Spending → Cash withdrawal', part: 'D' },
+  { value: 'DtoPiggyBank', label: 'Spending → Piggy Bank', part: 'D' },
 ];
 
 export default function AddTransferScreen() {

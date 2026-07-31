@@ -11,8 +11,9 @@ import { useLegacyImport } from '@/hooks/useLegacyImport';
 import { DonationCard } from '@/components/DonationCard';
 import { formatCents } from '@/lib/money';
 import { formatMonthYear } from '@/lib/dates';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { piggyBanks, ledgerParts } from '@/db/schema';
+import { piggyBanks, ledgerParts, expenses as expensesTable } from '@/db/schema';
 import type { Period } from '@/hooks/usePeriods';
 import type { DonationRecord } from '@/hooks/useDonation';
 
@@ -42,27 +43,32 @@ export default function DashboardScreen() {
   const [piggyTotal, setPiggyTotal] = useState(0);
   // Monthly spending for the current year (last 12 months)
   const [monthlySpending, setMonthlySpending] = useState<{ label: string; cents: number }[]>([]);
-  // Current Spending part: on-account vs cash view
+  // Spending breakdown: card vs cash expenses
   const [spendingView, setSpendingView] = useState<'month' | 'year'>('month');
-  const [spendingOnAccount, setSpendingOnAccount] = useState(0);
+  const [spendingCard, setSpendingCard] = useState(0);
   const [spendingCash, setSpendingCash] = useState(0);
-  const [yearSpendingOnAccount, setYearSpendingOnAccount] = useState(0);
+  const [yearSpendingCard, setYearSpendingCard] = useState(0);
   const [yearSpendingCash, setYearSpendingCash] = useState(0);
 
   const load = useCallback(async () => {
     const periods = await getAllPeriods();
-    const open = periods.find((p) => p.status === 'open') ?? periods[0] ?? null;
+    const now = new Date();
+    const curMonth = now.getMonth() + 1;
+    const curYear = now.getFullYear();
+    const open = periods.find((p) => p.month === curMonth && p.year === curYear)
+      ?? periods.find((p) => p.status === 'open')
+      ?? periods[0]
+      ?? null;
     setActivePeriod(open);
 
     if (open) {
       const donation = await getDonationRecord(open.id);
       setDonationRecord(donation);
 
-      // Current month Spending part cash/account split
-      const dParts = await getLedgerParts(open.id);
-      const dPart = dParts.find((p) => p.partType === 'D');
-      setSpendingOnAccount(dPart?.currentBalanceCents ?? 0);
-      setSpendingCash(dPart?.withdrawnCashAmountCents ?? 0);
+      // Current month: sum expenses by payment method
+      const monthExps = await db.select().from(expensesTable).where(eq(expensesTable.periodId, open.id));
+      setSpendingCard(monthExps.filter((e) => e.paymentMethod === 'card').reduce((s, e) => s + e.amountCents, 0));
+      setSpendingCash(monthExps.filter((e) => e.paymentMethod === 'cash').reduce((s, e) => s + e.amountCents, 0));
     }
 
     // All-time totals: sum monthly totals across all periods + legacy
@@ -77,19 +83,16 @@ export default function DashboardScreen() {
     }
     setAllTimeTotals(totals);
 
-    // Year spending: sum monthly cash/account across this calendar year
+    // Year spending: sum expenses by payment method across this calendar year
     const thisYear = new Date().getFullYear();
-    const yearPeriods = periods.filter((p) => p.year === thisYear);
-    let yAccount = 0, yCash = 0;
-    for (const p of yearPeriods) {
-      const pts = await getLedgerParts(p.id);
-      const d = pts.find((x) => x.partType === 'D');
-      if (d) {
-        yAccount += d.currentBalanceCents;
-        yCash += d.withdrawnCashAmountCents;
-      }
+    const yearPeriodIds = periods.filter((p) => p.year === thisYear).map((p) => p.id);
+    let yCard = 0, yCash = 0;
+    for (const pid of yearPeriodIds) {
+      const exps = await db.select().from(expensesTable).where(eq(expensesTable.periodId, pid));
+      yCard += exps.filter((e) => e.paymentMethod === 'card').reduce((s, e) => s + e.amountCents, 0);
+      yCash += exps.filter((e) => e.paymentMethod === 'cash').reduce((s, e) => s + e.amountCents, 0);
     }
-    setYearSpendingOnAccount(yAccount);
+    setYearSpendingCard(yCard);
     setYearSpendingCash(yCash);
 
     // Monthly spending bar chart: last 12 periods
@@ -131,8 +134,8 @@ export default function DashboardScreen() {
   const maxSpending = Math.max(...monthlySpending.map((m) => m.cents), 1);
 
   const spendCurrent = spendingView === 'month'
-    ? { account: spendingOnAccount, cash: spendingCash }
-    : { account: yearSpendingOnAccount, cash: yearSpendingCash };
+    ? { card: spendingCard, cash: spendingCash }
+    : { card: yearSpendingCard, cash: yearSpendingCash };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -157,36 +160,37 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/*Action buttons here: add expense, add transaction, add income; replaces the floating action button*/}
-        <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ACTIONS</Text>
+        {/* Quick actions */}
+        {hasPeriod && (
+          <>
+            <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ACTIONS</Text>
             <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
-              <View style={styles.switchRow}>
+              <View style={styles.actionRow}>
                 <TouchableOpacity
                   onPress={() => router.push('/expenses/add')}
-                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                  style={[styles.actionBtn, { backgroundColor: theme.custom.partD + '22' }]}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'month' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
-                    Add Expense
-                  </Text>
+                  <MaterialCommunityIcons name="cart-plus" size={20} color={theme.custom.partD} />
+                  <Text style={[styles.actionLabel, { color: theme.custom.partD }]}>Add Expense</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setSpendingView('year')}
-                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                  onPress={() => router.push('/transfers/add')}
+                  style={[styles.actionBtn, { backgroundColor: theme.colors.primary + '22' }]}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'year' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
-                    Add Transaction
-                  </Text>
+                  <MaterialCommunityIcons name="bank-transfer" size={20} color={theme.colors.primary} />
+                  <Text style={[styles.actionLabel, { color: theme.colors.primary }]}>Add Transfer</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setSpendingView('year')}
-                  style={[styles.switchBtn && { backgroundColor: theme.colors.primary + '22' }]}
+                  onPress={() => router.push('/income/add')}
+                  style={[styles.actionBtn, { backgroundColor: theme.custom.income + '22' }]}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: spendingView === 'year' ? theme.colors.primary : theme.colors.onSurface + '66' }}>
-                    Add Extra Income
-                  </Text>
+                  <MaterialCommunityIcons name="cash-plus" size={20} color={theme.custom.income} />
+                  <Text style={[styles.actionLabel, { color: theme.custom.income }]}>Add Income</Text>
                 </TouchableOpacity>
               </View>
             </Surface>
+          </>
+        )}
 
         {!hasPeriod ? (
           <Surface style={[styles.noMonth, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
@@ -239,13 +243,13 @@ export default function DashboardScreen() {
               <View style={styles.spendRow}>
                 <View style={{ flex: 1, alignItems: 'center' }}>
                   <MaterialCommunityIcons name="credit-card" size={20} color={theme.custom.partD} />
-                  <Text style={[styles.spendLabel, { color: theme.colors.onSurface + '77' }]}>On account</Text>
-                  <Text style={[styles.spendValue, { color: theme.colors.onSurface }]}>{formatCents(spendCurrent.account)}</Text>
+                  <Text style={[styles.spendLabel, { color: theme.colors.onSurface + '77' }]}>Spent from card</Text>
+                  <Text style={[styles.spendValue, { color: theme.colors.onSurface }]}>{formatCents(spendCurrent.card)}</Text>
                 </View>
                 <View style={[styles.vDivider, { backgroundColor: theme.custom.cardBorder }]} />
                 <View style={{ flex: 1, alignItems: 'center' }}>
                   <MaterialCommunityIcons name="cash" size={20} color={theme.custom.partD} />
-                  <Text style={[styles.spendLabel, { color: theme.colors.onSurface + '77' }]}>Cash withdrawn</Text>
+                  <Text style={[styles.spendLabel, { color: theme.colors.onSurface + '77' }]}>Spent from cash</Text>
                   <Text style={[styles.spendValue, { color: theme.colors.onSurface }]}>{formatCents(spendCurrent.cash)}</Text>
                 </View>
               </View>
@@ -265,7 +269,7 @@ export default function DashboardScreen() {
                           <Text style={[styles.barValue, { color: theme.colors.onSurface + '66' }]}>
                             {m.cents >= 100000 ? `${Math.round(m.cents / 10000) / 10}k` : `${Math.round(m.cents / 100)}`}
                           </Text>
-                          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                          <View style={styles.barTrack}>
                             <View style={[styles.bar, { height: barH, backgroundColor: isActive ? theme.custom.partD : theme.custom.partD + '66' }]} />
                           </View>
                           <Text style={[styles.barLabel, { color: theme.colors.onSurface + '55' }]}>{m.label}</Text>
@@ -276,6 +280,15 @@ export default function DashboardScreen() {
                 </Surface>
               </>
             )}
+
+            {/* Monthly Periods */}
+            <TouchableOpacity onPress={() => router.push('/month/list')} activeOpacity={0.7}>
+              <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+                <MaterialCommunityIcons name="calendar-month" size={22} color={theme.colors.primary} />
+                <Text style={[styles.allTimeLabel, { color: theme.colors.onSurface, fontWeight: '600', fontSize: 15 }]}>Monthly Periods</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.onSurface + '44'} />
+              </Surface>
+            </TouchableOpacity>
 
             {/* Donation */}
             <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>DONATION</Text>
@@ -290,6 +303,15 @@ export default function DashboardScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {!hasPeriod && (
+        <FAB
+          icon="plus"
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          color={theme.colors.onPrimary}
+          onPress={() => router.push('/month/new')}
+        />
+      )}
     </View>
   );
 }
@@ -315,6 +337,9 @@ const styles = StyleSheet.create({
   allTimeLabel: { flex: 1, fontSize: 14 },
   allTimeValue: { fontSize: 14, fontWeight: '700' },
   divider: { height: 1, marginVertical: 2 },
+  actionRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, gap: 4 },
+  actionLabel: { fontSize: 11, fontWeight: '700' },
   switchRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   switchBtn: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
   spendRow: { flexDirection: 'row', alignItems: 'center' },
@@ -322,8 +347,9 @@ const styles = StyleSheet.create({
   spendValue: { fontSize: 16, fontWeight: '700', marginTop: 2 },
   vDivider: { width: 1, height: 60, marginHorizontal: 8 },
   chartRow: { flexDirection: 'row', alignItems: 'flex-end', height: 120, gap: 4 },
-  barCol: { flex: 1, alignItems: 'center', height: 120, justifyContent: 'flex-end' },
+  barCol: { flex: 1, alignItems: 'center', height: 120 },
   barValue: { fontSize: 8, marginBottom: 2 },
+  barTrack: { flex: 1, alignSelf: 'stretch', justifyContent: 'flex-end', alignItems: 'center' },
   bar: { width: '80%', borderRadius: 3 },
   barLabel: { fontSize: 8, marginTop: 3 },
   noMonth: { borderRadius: 12, borderWidth: 1, padding: 24, alignItems: 'center', gap: 8, marginTop: 24 },

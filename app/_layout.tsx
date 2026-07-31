@@ -3,8 +3,8 @@ import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import * as SQLite from 'expo-sqlite';
 import * as Font from 'expo-font';
+import { sqliteDb } from '@/db';
 import { runMigrations } from '@/db/migrations';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useDbStore } from '@/stores/dbStore';
@@ -32,11 +32,10 @@ export default function RootLayout() {
   useEffect(() => {
     async function init() {
       try {
-        const db = SQLite.openDatabaseSync('coinquest.db');
-        await runMigrations(db);
+        await runMigrations(sqliteDb);
 
         // Load saved settings
-        const result = await db.getAllAsync<{ theme: string; user_name: string }>(
+        const result = await sqliteDb.getAllAsync<{ theme: string; user_name: string }>(
           'SELECT theme, user_name FROM app_settings WHERE id = 1 LIMIT 1',
         );
         if (result[0]) {

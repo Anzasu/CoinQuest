@@ -9,10 +9,13 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useTransfers } from '@/hooks/useTransfers';
 import { useDonation } from '@/hooks/useDonation';
 import { useExternalIncome } from '@/hooks/useExternalIncome';
+import { useLegacyImport } from '@/hooks/useLegacyImport';
 import { formatCents } from '@/lib/money';
 import { formatDateDisplay, formatMonthYear } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { db } from '@/db';
+import { ledgerParts as ledgerPartsTable } from '@/db/schema';
 import type { Period, LedgerPart } from '@/hooks/usePeriods';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Transfer } from '@/hooks/useTransfers';
@@ -29,8 +32,10 @@ export default function MonthDetailScreen() {
   const { getTransfersForPeriod, deleteTransfer } = useTransfers();
   const { getDonationRecord, completeDonation, undoDonation } = useDonation();
   const { getForPeriod, deleteExternalIncome } = useExternalIncome();
+  const { getLegacyTotals } = useLegacyImport();
   const [period, setPeriod] = useState<Period | null>(null);
   const [parts, setParts] = useState<LedgerPart[]>([]);
+  const [overallInAccount, setOverallInAccount] = useState<Record<string, number>>({ A: 0, B: 0, C: 0, D: 0 });
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [income, setIncome] = useState<ExternalIncome[]>([]);
@@ -56,6 +61,22 @@ export default function MonthDetailScreen() {
         setDonation(don);
         const inc = await getForPeriod(periodId);
         setIncome(inc);
+
+        // Compute overall_in_account per part:
+        // overall = sum of monthlyTotalCents across ALL periods + legacy imports
+        // overall_in_account = overall - spentAmountCents_sum - transferredOutAmountCents_sum - withdrawnCashAmountCents_sum
+        const allRows = await db.select().from(ledgerPartsTable);
+        const legacy = await getLegacyTotals();
+        const oia: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+        for (const partKey of ['A', 'B', 'C', 'D'] as const) {
+          const rows = allRows.filter((r) => r.partType === partKey);
+          const overall = rows.reduce((s, r) => s + r.monthlyTotalCents, 0) + (legacy[partKey] ?? 0);
+          const spent = rows.reduce((s, r) => s + r.spentAmountCents, 0);
+          const transferred = rows.reduce((s, r) => s + r.transferredOutAmountCents, 0);
+          const withdrawn = rows.reduce((s, r) => s + r.withdrawnCashAmountCents, 0);
+          oia[partKey] = overall - spent - transferred - withdrawn;
+        }
+        setOverallInAccount(oia);
       }
       load();
     }, [periodId]),
@@ -119,7 +140,7 @@ export default function MonthDetailScreen() {
         ))}
       </ScrollView>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll}>
         {(tab === 'A' || tab === 'B' || tab === 'C' || tab === 'D') && (
           <PartDetailView
             part={getPart(tab)}
@@ -128,6 +149,7 @@ export default function MonthDetailScreen() {
             transfers={transfers.filter((t) => t.sourcePart === tab)}
             theme={theme}
             period={period}
+            overallInAccount={overallInAccount[tab] ?? 0}
             onDeleteExpense={async (id) => { await deleteExpense(id); setExpenses(await getExpensesForPeriod(periodId)); }}
             onDeleteTransfer={async (id) => { await deleteTransfer(id); setTransfers(await getTransfersForPeriod(periodId)); }}
             router={router}
@@ -165,7 +187,7 @@ export default function MonthDetailScreen() {
   );
 }
 
-function PartDetailView({ part, tab, expenses, transfers, theme, period, onDeleteExpense, onDeleteTransfer, router, periodId }: any) {
+function PartDetailView({ part, tab, expenses, transfers, theme, period, overallInAccount, onDeleteExpense, onDeleteTransfer, router, periodId }: any) {
   const partColors = { A: theme.custom.partA, B: theme.custom.partB, C: theme.custom.partC, D: theme.custom.partD };
   const color = partColors[tab as 'A' | 'B' | 'C' | 'D'];
 
@@ -182,8 +204,8 @@ function PartDetailView({ part, tab, expenses, transfers, theme, period, onDelet
   return (
     <View style={{ gap: 8 }}>
       <Surface style={[styles.partSummary, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
-        <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Current balance</Text>
-        <Text style={[styles.balance, { color }]}>{formatCents(part?.currentBalanceCents ?? 0)}</Text>
+        <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Overall in account</Text>
+        <Text style={[styles.balance, { color }]}>{formatCents(overallInAccount)}</Text>
         <View style={styles.statRow}>
           <Stat label="This month" value={part?.monthlyTotalCents ?? 0} theme={theme} />
           {(tab === 'A' || tab === 'B') && (
@@ -350,7 +372,7 @@ function BudgetView({ period, theme, router, periodId }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  tabStrip: { flexGrow: 0, borderBottomWidth: 1 },
+  tabStrip: { flexGrow: 0, flexShrink: 0, borderBottomWidth: 1 },
   tabContent: { flexDirection: 'row', gap: 8, padding: 8 },
   scroll: { padding: 16, gap: 8 },
   partSummary: { borderRadius: 12, borderWidth: 1, padding: 16, gap: 8 },
