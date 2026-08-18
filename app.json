@@ -31,7 +31,16 @@
         }
       ],
       "expo-asset",
-      "expo-font"
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf"
+            ]
+          }
+        }
+      ]
     ],
     "scheme": "coinquest",
     "experiments": {

@@ -33,3 +33,16 @@ export function currentMonth(): { month: number; year: number } {
   const now = new Date();
   return { month: now.getMonth() + 1, year: now.getFullYear() };
 }
+
+export function resolveNewMonthTarget(
+  current: { month: number; year: number },
+  currentExists: boolean,
+  nextExists: boolean,
+): { month: number; year: number } | null {
+  if (!currentExists) return current;
+  if (nextExists) return null;
+
+  return current.month === 12
+    ? { month: 1, year: current.year + 1 }
+    : { month: current.month + 1, year: current.year };
+}

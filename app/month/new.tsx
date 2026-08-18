@@ -11,7 +11,7 @@ import { usePeriods } from '@/hooks/usePeriods';
 import { useBills } from '@/hooks/useBills';
 import { MoneyInput } from '@/components/MoneyInput';
 import { splitSalary, remainingAfterBills, calculateDonationGoal, formatCents } from '@/lib/money';
-import { currentMonth, formatMonthYear } from '@/lib/dates';
+import { currentMonth, formatMonthYear, resolveNewMonthTarget } from '@/lib/dates';
 
 interface BillRow {
   templateId?: number;
@@ -29,11 +29,8 @@ export default function NewMonthScreen() {
   const { startNewMonth, getPeriodByMonthYear } = usePeriods();
   const { getActiveTemplates } = useBills();
 
-  const now = currentMonth();
-  const nextM = now.month === 12 ? 1 : now.month + 1;
-  const nextY = now.month === 12 ? now.year + 1 : now.year;
-  const [targetMonth] = useState(nextM);
-  const [targetYear] = useState(nextY);
+  const [targetMonth, setTargetMonth] = useState<number | null>(null);
+  const [targetYear, setTargetYear] = useState<number | null>(null);
   const [step, setStep] = useState<Step>('salary');
   const [salary, setSalary] = useState<number | null>(null);
   const [salaryError, setSalaryError] = useState('');
@@ -43,26 +40,44 @@ export default function NewMonthScreen() {
 
   useEffect(() => {
     async function load() {
-      // Block if next month already exists
-      const existing = await getPeriodByMonthYear(targetMonth, targetYear);
-      if (existing) {
+      const current = currentMonth();
+      const currentPeriod = await getPeriodByMonthYear(current.month, current.year);
+      const next = current.month === 12
+        ? { month: 1, year: current.year + 1 }
+        : { month: current.month + 1, year: current.year };
+      const nextPeriod = currentPeriod
+        ? await getPeriodByMonthYear(next.month, next.year)
+        : undefined;
+      const target = resolveNewMonthTarget(current, !!currentPeriod, !!nextPeriod);
+
+      if (!target) {
         Alert.alert(
-          'Month already exists',
-          `${formatMonthYear(targetMonth, targetYear)} already has a period. You can find it in the Monthly Periods list.`,
+          'Months already exist',
+          `${formatMonthYear(current.month, current.year)} and ${formatMonthYear(next.month, next.year)} have already been created.`,
           [{ text: 'OK', onPress: () => router.back() }],
         );
         return;
       }
 
-      // Load bill templates
-      const templates = await getActiveTemplates();
-      setBills(
-        templates.map((t) => ({
-          templateId: t.id,
-          name: t.name,
-          amountCents: t.amountCents,
-        })),
-      );
+      setTargetMonth(target.month);
+      setTargetYear(target.year);
+
+      try {
+        const templates = await getActiveTemplates();
+        setBills(
+          templates.map((t) => ({
+            templateId: t.id,
+            name: t.name,
+            amountCents: t.amountCents,
+          })),
+        );
+      } catch (error: any) {
+        Alert.alert(
+          'Error',
+          error?.message ?? 'Could not prepare the new month',
+          [{ text: 'OK', onPress: () => router.back() }],
+        );
+      }
     }
     load();
   }, []);
@@ -125,7 +140,7 @@ export default function NewMonthScreen() {
   }
 
   async function handleConfirm() {
-    if (!salary || !split) return;
+    if (!salary || !split || targetMonth == null || targetYear == null) return;
     setSaving(true);
     try {
       await startNewMonth({
@@ -153,8 +168,11 @@ export default function NewMonthScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title={`Start ${formatMonthYear(targetMonth, targetYear)}`} />
+        <Appbar.Content title={targetMonth == null || targetYear == null ? 'Preparing month...' : `Start ${formatMonthYear(targetMonth, targetYear)}`} />
       </Appbar.Header>
+
+      {targetMonth == null || targetYear == null ? null : (
+        <>
 
       {/* Step indicator */}
       <View style={styles.steps}>
@@ -269,6 +287,8 @@ export default function NewMonthScreen() {
           </Button>
         )}
       </View>
+        </>
+      )}
     </View>
   );
 }
