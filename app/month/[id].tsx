@@ -150,8 +150,8 @@ export default function MonthDetailScreen() {
             theme={theme}
             period={period}
             overallInAccount={overallInAccount[tab] ?? 0}
-            onDeleteExpense={async (id) => { await deleteExpense(id); setExpenses(await getExpensesForPeriod(periodId)); }}
-            onDeleteTransfer={async (id) => { await deleteTransfer(id); setTransfers(await getTransfersForPeriod(periodId)); }}
+            onDeleteExpense={async (id: number) => { await deleteExpense(id); setExpenses(await getExpensesForPeriod(periodId)); }}
+            onDeleteTransfer={async (id: number) => { await deleteTransfer(id); setTransfers(await getTransfersForPeriod(periodId)); }}
             router={router}
             periodId={periodId}
           />
@@ -161,7 +161,7 @@ export default function MonthDetailScreen() {
           <IncomeView
             income={income}
             theme={theme}
-            onDelete={async (id) => { await deleteExternalIncome(id); setIncome(await getForPeriod(periodId)); }}
+            onDelete={async (id: number) => { await deleteExternalIncome(id); setIncome(await getForPeriod(periodId)); }}
             onAdd={() => router.push({ pathname: '/income/add', params: { periodId } })}
           />
         )}

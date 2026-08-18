@@ -37,7 +37,7 @@ export default function LegacyImportScreen() {
 
   async function handleImport(part: 'A' | 'B' | 'C' | 'D') {
     const amt = amounts[part];
-    if (!amt || amt <= 0) {
+    if (!amt || amt == 0) {
       Alert.alert('Invalid amount', 'Enter a valid amount for ' + PART_LABELS[part]);
       return;
     }
