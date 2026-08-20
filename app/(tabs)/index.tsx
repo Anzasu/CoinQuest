@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, TouchableOpacity, Alert } from 'react-native';
 import { Text, FAB, Surface, Portal } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,15 +7,15 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { usePeriods } from '@/hooks/usePeriods';
 import { useDonation } from '@/hooks/useDonation';
-import { useLegacyImport } from '@/hooks/useLegacyImport';
 import { DonationCard } from '@/components/DonationCard';
 import { formatCents } from '@/lib/money';
 import { formatMonthYear } from '@/lib/dates';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { piggyBanks, ledgerParts, expenses as expensesTable } from '@/db/schema';
+import { piggyBanks, expenses as expensesTable } from '@/db/schema';
 import type { Period } from '@/hooks/usePeriods';
 import type { DonationRecord } from '@/hooks/useDonation';
+import { getPartBalanceSummaries } from '@/lib/partBalances';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -31,13 +31,12 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { getAllPeriods, getLedgerParts } = usePeriods();
   const { getDonationRecord, completeDonation, undoDonation } = useDonation();
-  const { getLegacyTotals } = useLegacyImport();
 
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [donationRecord, setDonationRecord] = useState<DonationRecord | undefined>();
   const [refreshing, setRefreshing] = useState(false);
 
-  // All-time per-part totals: sum of monthlyTotalCents across all periods + legacy
+  // All-time remaining per part: all income minus all outflows.
   const [allTimeTotals, setAllTimeTotals] = useState<Record<string, number>>({ A: 0, B: 0, C: 0, D: 0 });
   // Piggy bank totals
   const [piggyTotal, setPiggyTotal] = useState(0);
@@ -71,15 +70,10 @@ export default function DashboardScreen() {
       setSpendingCash(monthExps.filter((e) => e.paymentMethod === 'cash').reduce((s, e) => s + e.amountCents, 0));
     }
 
-    // All-time totals: sum monthly totals across all periods + legacy
-    const allParts = await db.select().from(ledgerParts);
-    const totals: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
-    for (const p of allParts) {
-      totals[p.partType] = (totals[p.partType] ?? 0) + p.monthlyTotalCents;
-    }
-    const legacy = await getLegacyTotals();
+    const summaries = await getPartBalanceSummaries();
+    const totals: Record<string, number> = {};
     for (const k of ['A', 'B', 'C', 'D'] as const) {
-      totals[k] = (totals[k] ?? 0) + (legacy[k] ?? 0);
+      totals[k] = summaries[k].remainingCents;
     }
     setAllTimeTotals(totals);
 
@@ -118,10 +112,15 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }
 
-  async function handleDonationComplete() {
+  async function handleDonationComplete(amountCents: number) {
     if (!activePeriod) return;
-    await completeDonation(activePeriod.id);
-    await load();
+    try {
+      await completeDonation(activePeriod.id, amountCents);
+      await load();
+    } catch (error: any) {
+      Alert.alert('Donation not saved', error.message ?? 'Could not complete donation');
+      throw error;
+    }
   }
 
   async function handleDonationUndo() {
@@ -198,8 +197,8 @@ export default function DashboardScreen() {
           </Surface>
         ) : (
           <>
-            {/* All-time part totals */}
-            <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ALL-TIME TOTALS</Text>
+            {/* All-time remaining balances */}
+            <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ALL-TIME BALANCES</Text>
             <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
               {(['A', 'B', 'C', 'D'] as const).map((key) => (
                 <View key={key} style={styles.allTimeRow}>
@@ -293,7 +292,6 @@ export default function DashboardScreen() {
               record={donationRecord}
               onComplete={handleDonationComplete}
               onUndo={handleDonationUndo}
-              onPress={() => router.push({ pathname: '/month/[id]', params: { id: activePeriod.id, tab: 'donation' } })}
             />
           </>
         )}

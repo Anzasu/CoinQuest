@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, Appbar, Button, Surface, Divider } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -56,9 +56,13 @@ export default function LegacyImportScreen() {
   }
 
   async function handleDelete(id: number) {
-    await deleteImport(id);
-    const updated = await getAll();
-    setImports(updated);
+    try {
+      await deleteImport(id);
+      const updated = await getAll();
+      setImports(updated);
+    } catch (error: any) {
+      Alert.alert('Legacy amount not deleted', error.message ?? 'Could not delete legacy amount');
+    }
   }
 
   const groupedByPart = (['A', 'B', 'C', 'D'] as const).map((part) => ({
@@ -74,7 +78,15 @@ export default function LegacyImportScreen() {
         <Appbar.Content title="Legacy Import" subtitle="Pre-app historical balances" color={theme.colors.onSurface} />
       </Appbar.Header>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAvoidingView
+        style={styles.keyboardArea}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <Surface style={[styles.infoBox, { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.custom.cardBorder }]}>
           <Text style={[styles.infoTitle, { color: theme.colors.onSurface }]}>What is this?</Text>
           <Text style={[styles.infoText, { color: theme.colors.onSurface + '88' }]}>
@@ -145,14 +157,16 @@ export default function LegacyImportScreen() {
           </View>
         ))}
 
-        <View style={{ height: 24 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  keyboardArea: { flex: 1 },
   scroll: { padding: 16, gap: 8 },
   infoBox: { borderRadius: 12, borderWidth: 1, padding: 16, gap: 8, marginBottom: 8 },
   infoTitle: { fontSize: 15, fontWeight: '700' },

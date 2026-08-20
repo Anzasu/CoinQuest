@@ -5,6 +5,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
 import { budgetStatus } from '@/lib/money';
 import type { ExpenseCategory } from '@/lib/categories';
+import { getOverallPartBalance } from '@/lib/partBalances';
 
 export type Expense = typeof expenses.$inferSelect;
 
@@ -25,6 +26,11 @@ export function useExpenses() {
     paymentMethod: 'cash' | 'card';
     note?: string;
   }): Promise<Expense> => {
+    const overallAvailable = await getOverallPartBalance('D');
+    if (params.amountCents > overallAvailable) {
+      throw new Error('This expense exceeds the all-time Spending balance.');
+    }
+
     const [expense] = await db
       .insert(expenses)
       .values({
@@ -120,6 +126,14 @@ export function useExpenses() {
     const [exp] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!exp) return;
 
+    const delta = params.amountCents - oldAmountCents;
+    if (delta > 0) {
+      const overallAvailable = await getOverallPartBalance('D');
+      if (delta > overallAvailable) {
+        throw new Error('This expense exceeds the all-time Spending balance.');
+      }
+    }
+
     await db
       .update(expenses)
       .set({
@@ -130,8 +144,6 @@ export function useExpenses() {
         note: params.note ?? null,
       })
       .where(eq(expenses.id, id));
-
-    const delta = params.amountCents - oldAmountCents;
 
     // Adjust Part D
     const parts = await db

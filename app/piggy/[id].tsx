@@ -17,13 +17,13 @@ import { piggyBanks as piggyBanksTable, piggyBankTransactions } from '@/db/schem
 import { eq } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
 
-type ActionType = 'add' | 'spend' | 'transfer';
+type ActionType = 'add' | 'spend' | 'return' | 'transfer';
 
 export default function PiggyBankDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useAppTheme();
   const router = useRouter();
-  const { getPiggyBank, getTransactions, spendFromPiggyBank, archivePiggyBank, unarchivePiggyBank, deleteTransaction, transferBetweenPiggyBanks, getAllPiggyBanks } = usePiggyBanks();
+  const { getPiggyBank, getTransactions, spendFromPiggyBank, returnToSpending, archivePiggyBank, unarchivePiggyBank, deletePiggyBank, deleteTransaction, transferBetweenPiggyBanks, getAllPiggyBanks } = usePiggyBanks();
   const { getAllPeriods } = usePeriods();
 
   const [pb, setPb] = useState<PiggyBank | null>(null);
@@ -81,9 +81,20 @@ export default function PiggyBankDetailScreen() {
           createdAt: nowIso(),
         });
       } else if (actionDialog === 'spend') {
+        if (!open) throw new Error('Start a month before spending from a piggy bank.');
         await spendFromPiggyBank({
           piggyBankId: pbId,
-          periodId: open?.id ?? 0,
+          periodId: open.id,
+          amountCents: actionAmount,
+          balanceType: actionBalanceType,
+          date: todayIso(),
+          note: actionNote.trim() || undefined,
+        });
+      } else if (actionDialog === 'return') {
+        if (!open) throw new Error('Start a month before returning money to Spending.');
+        await returnToSpending({
+          piggyBankId: pbId,
+          periodId: open.id,
           amountCents: actionAmount,
           balanceType: actionBalanceType,
           date: todayIso(),
@@ -144,10 +155,21 @@ export default function PiggyBankDetailScreen() {
   }
 
   async function handleDelete() {
-    await db.delete(piggyBankTransactions).where(eq(piggyBankTransactions.piggyBankId, pbId));
-    await db.delete(piggyBanksTable).where(eq(piggyBanksTable.id, pbId));
-    setDeleteDialog(false);
-    router.back();
+    setSaving(true);
+    try {
+      const periods = await getAllPeriods();
+      const now = new Date();
+      const targetPeriod = periods.find((period) => period.month === now.getMonth() + 1 && period.year === now.getFullYear())
+        ?? periods.find((period) => period.status === 'open')
+        ?? periods[0];
+      await deletePiggyBank(pbId, targetPeriod?.id);
+      setDeleteDialog(false);
+      router.back();
+    } catch (error: any) {
+      Alert.alert('Error', error.message ?? 'Could not delete piggy bank');
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!pb) return null;
@@ -157,6 +179,7 @@ export default function PiggyBankDetailScreen() {
   const ACTION_TITLES: Record<ActionType, string> = {
     add: 'Add funds',
     spend: 'Spend from piggy bank',
+    return: 'Return to Spending',
     transfer: 'Transfer to another piggy bank',
   };
 
@@ -213,6 +236,9 @@ export default function PiggyBankDetailScreen() {
                 Spend
               </Button>
             </View>
+            <Button mode="outlined" icon="cash-refund" onPress={() => setActionDialog('return')} style={{ marginTop: 4 }}>
+              Return to Spending
+            </Button>
             {allBanks.length > 0 && (
               <Button mode="outlined" icon="bank-transfer" onPress={() => setActionDialog('transfer')} style={{ marginTop: 4 }}>
                 Transfer to another piggy bank
@@ -230,7 +256,7 @@ export default function PiggyBankDetailScreen() {
             <Surface key={t.id} style={[styles.txnRow, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
               <View style={styles.txnContent}>
                 <Text style={[styles.txnType, { color: theme.colors.onSurface }]}>
-                  {t.type === 'add' ? '↓ Added' : t.type === 'remove' ? '↑ Removed' : '💸 Spent'}
+                  {t.type === 'add' ? '↓ Added' : t.type === 'return' ? '↑ Returned to Spending' : t.type === 'remove' ? '↑ Removed' : '💸 Spent'}
                   {' · '}{t.balanceType}
                 </Text>
                 <Text style={[styles.txnMeta, { color: theme.colors.onSurface + '66' }]}>
@@ -335,7 +361,9 @@ export default function PiggyBankDetailScreen() {
       <ConfirmDialog
         visible={deleteDialog}
         title="Delete piggy bank?"
-        message={`Permanently delete "${pb.name}" and all its transactions? This cannot be undone.`}
+        message={totalBalance > 0
+          ? `Permanently delete "${pb.name}"? Its remaining ${formatCents(totalBalance)} will be returned to Spending and recorded as Other income with the note "piggy bank deleted".`
+          : `Permanently delete "${pb.name}" and all its transactions? This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={handleDelete}
         onCancel={() => setDeleteDialog(false)}

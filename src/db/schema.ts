@@ -141,14 +141,14 @@ export const piggyBankTransactions = sqliteTable('piggy_bank_transactions', {
   piggyBankId: integer('piggy_bank_id').notNull().references(() => piggyBanks.id),
   date: text('date').notNull(),
   amountCents: integer('amount_cents').notNull(),
-  type: text('type', { enum: ['add', 'remove', 'spend'] }).notNull(),
+  type: text('type', { enum: ['add', 'remove', 'spend', 'return'] }).notNull(),
   balanceType: text('balance_type', { enum: ['account', 'cash'] }).notNull().default('account'),
   note: text('note'),
   linkedExpenseId: integer('linked_expense_id').references(() => expenses.id),
   createdAt: text('created_at').notNull(),
 });
 
-// Monthly donation record — 25% of Part D before spending
+// Monthly donation record — recommended amount plus completion status.
 export const donationRecords = sqliteTable('donation_records', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   periodId: integer('period_id').notNull().references(() => monthlyPeriods.id),

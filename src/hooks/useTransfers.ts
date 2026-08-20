@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { transfers, ledgerParts, piggyBanks, piggyBankTransactions, monthlyPeriods } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
+import { getOverallPartBalance } from '@/lib/partBalances';
 
 export type Transfer = typeof transfers.$inferSelect;
 
@@ -33,6 +34,11 @@ export function useTransfers() {
     piggyBankId?: number;
     note?: string;
   }): Promise<Transfer> => {
+    const overallAvailable = await getOverallPartBalance(params.sourcePart);
+    if (params.amountCents > overallAvailable) {
+      throw new Error(`This transfer exceeds Part ${params.sourcePart}'s all-time balance.`);
+    }
+
     const [transfer] = await db
       .insert(transfers)
       .values({
@@ -55,13 +61,13 @@ export function useTransfers() {
 
     if (parts[0]) {
       const isWithdrawal = params.transferType.includes('CashWithdrawal');
-      const isExternal = params.transferType.includes('toExternal');
+      const isTransferOut = params.transferType.includes('toExternal') || params.transferType === 'DtoPiggyBank';
 
       await db
         .update(ledgerParts)
         .set({
           currentBalanceCents: parts[0].currentBalanceCents - params.amountCents,
-          transferredOutAmountCents: isExternal
+          transferredOutAmountCents: isTransferOut
             ? parts[0].transferredOutAmountCents + params.amountCents
             : parts[0].transferredOutAmountCents,
           withdrawnCashAmountCents: isWithdrawal
@@ -112,13 +118,13 @@ export function useTransfers() {
 
     if (parts[0]) {
       const isWithdrawal = transfer.transferType.includes('CashWithdrawal');
-      const isExternal = transfer.transferType.includes('toExternal');
+      const isTransferOut = transfer.transferType.includes('toExternal') || transfer.transferType === 'DtoPiggyBank';
 
       await db
         .update(ledgerParts)
         .set({
           currentBalanceCents: parts[0].currentBalanceCents + transfer.amountCents,
-          transferredOutAmountCents: isExternal
+          transferredOutAmountCents: isTransferOut
             ? parts[0].transferredOutAmountCents - transfer.amountCents
             : parts[0].transferredOutAmountCents,
           withdrawnCashAmountCents: isWithdrawal

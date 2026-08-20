@@ -9,11 +9,13 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { CategoryGrid } from '@/components/CategoryPicker';
 import { todayIso } from '@/lib/dates';
 import type { ExpenseCategory } from '@/lib/categories';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AddExpenseScreen() {
   const { periodId: pidParam } = useLocalSearchParams<{ periodId?: string }>();
   const theme = useAppTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { addExpense } = useExpenses();
   const { getAllPeriods } = usePeriods();
 
@@ -118,7 +120,7 @@ export default function AddExpenseScreen() {
         <View style={{ height: 16 }} />
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder }]}>
+      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder, paddingBottom: 16 + insets.bottom }]}>
         <Button mode="outlined" onPress={() => router.back()}>Cancel</Button>
         <Button mode="contained" onPress={handleSave} loading={saving} disabled={saving} style={styles.saveBtn}>
           Save Expense

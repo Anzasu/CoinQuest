@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { TextInput, Text, HelperText } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -14,13 +14,21 @@ interface MoneyInputProps {
 
 export function MoneyInput({ label, valueCents, onChange, error, disabled }: MoneyInputProps) {
   const theme = useAppTheme();
+  const lastEmittedValue = useRef<number | null>(valueCents);
   const [raw, setRaw] = useState(
     valueCents != null ? (valueCents / 100).toFixed(2).replace('.', ',') : '',
   );
 
+  useEffect(() => {
+    if (valueCents === lastEmittedValue.current) return;
+    lastEmittedValue.current = valueCents;
+    setRaw(valueCents != null ? (valueCents / 100).toFixed(2).replace('.', ',') : '');
+  }, [valueCents]);
+
   function handleChange(text: string) {
     setRaw(text);
     const parsed = parseEuroInput(text);
+    lastEmittedValue.current = parsed;
     onChange(parsed);
   }
 

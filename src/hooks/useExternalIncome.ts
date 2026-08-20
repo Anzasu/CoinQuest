@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { db } from '@/db';
 import { externalIncome, ledgerParts, monthlyPeriods } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { getOverallPartBalance } from '@/lib/partBalances';
 
 export type ExternalIncome = typeof externalIncome.$inferSelect;
 
@@ -58,6 +59,11 @@ export function useExternalIncome() {
   const deleteExternalIncome = useCallback(async (id: number): Promise<void> => {
     const [record] = await db.select().from(externalIncome).where(eq(externalIncome.id, id));
     if (!record) return;
+
+    const overallAvailable = await getOverallPartBalance('D');
+    if (record.amountCents > overallAvailable) {
+      throw new Error('This income cannot be deleted because part of it has already been spent.');
+    }
 
     await db.delete(externalIncome).where(eq(externalIncome.id, id));
 

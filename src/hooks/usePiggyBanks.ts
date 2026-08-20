@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { db } from '@/db';
-import { piggyBanks, piggyBankTransactions, expenses } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { piggyBanks, piggyBankTransactions, ledgerParts, externalIncome, transfers } from '@/db/schema';
+import { eq, desc, and } from 'drizzle-orm';
 import { nowIso } from '@/lib/dates';
+import { getOverallPartBalance } from '@/lib/partBalances';
 
 export type PiggyBank = typeof piggyBanks.$inferSelect;
 export type PiggyBankTransaction = typeof piggyBankTransactions.$inferSelect;
@@ -102,6 +103,41 @@ export function usePiggyBanks() {
     await db.update(piggyBanks).set({ isArchived: false }).where(eq(piggyBanks.id, id));
   }, []);
 
+  const deletePiggyBank = useCallback(async (id: number, periodId?: number): Promise<void> => {
+    const [pb] = await db.select().from(piggyBanks).where(eq(piggyBanks.id, id));
+    if (!pb) return;
+
+    const remainingBalance = pb.balanceOnAccountCents + pb.balanceCashCents;
+    if (remainingBalance > 0) {
+      if (!periodId) throw new Error('Start a month before deleting a piggy bank that still has a balance.');
+
+      const [partD] = await db
+        .select()
+        .from(ledgerParts)
+        .where(and(eq(ledgerParts.periodId, periodId), eq(ledgerParts.partType, 'D')));
+      if (!partD) throw new Error('The selected month has no Spending part.');
+
+      await db.insert(externalIncome).values({
+        periodId,
+        amountCents: remainingBalance,
+        type: 'other',
+        date: nowIso().split('T')[0],
+        note: 'piggy bank deleted',
+      });
+      await db
+        .update(ledgerParts)
+        .set({
+          currentBalanceCents: partD.currentBalanceCents + remainingBalance,
+          monthlyTotalCents: partD.monthlyTotalCents + remainingBalance,
+        })
+        .where(eq(ledgerParts.id, partD.id));
+    }
+
+    await db.update(transfers).set({ piggyBankId: null }).where(eq(transfers.piggyBankId, id));
+    await db.delete(piggyBankTransactions).where(eq(piggyBankTransactions.piggyBankId, id));
+    await db.delete(piggyBanks).where(eq(piggyBanks.id, id));
+  }, []);
+
   const deleteTransaction = useCallback(async (txnId: number): Promise<void> => {
     const [txn] = await db.select().from(piggyBankTransactions).where(eq(piggyBankTransactions.id, txnId));
     if (!txn) return;
@@ -115,11 +151,36 @@ export function usePiggyBanks() {
         [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal - txn.amountCents,
         totalAddedAllTimeCents: pb.totalAddedAllTimeCents - txn.amountCents,
       }).where(eq(piggyBanks.id, pb.id));
-    } else if (txn.type === 'remove') {
+    } else if (txn.type === 'remove' || txn.type === 'return') {
+      if (txn.type === 'return') {
+        const overallAvailable = await getOverallPartBalance('D');
+        if (txn.amountCents > overallAvailable) {
+          throw new Error('This return cannot be reverted because part of it has already been spent.');
+        }
+      }
       await db.update(piggyBanks).set({
         [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal + txn.amountCents,
         totalRemovedAllTimeCents: pb.totalRemovedAllTimeCents - txn.amountCents,
       }).where(eq(piggyBanks.id, pb.id));
+
+      if (txn.type === 'return') {
+        const { monthlyPeriods } = await import('@/db/schema');
+        const date = new Date(txn.date);
+        const [period] = await db.select().from(monthlyPeriods).where(
+          and(eq(monthlyPeriods.month, date.getMonth() + 1), eq(monthlyPeriods.year, date.getFullYear()))
+        );
+        if (period) {
+          const [partD] = await db.select().from(ledgerParts).where(
+            and(eq(ledgerParts.periodId, period.id), eq(ledgerParts.partType, 'D'))
+          );
+          if (partD) {
+            await db.update(ledgerParts).set({
+              currentBalanceCents: partD.currentBalanceCents - txn.amountCents,
+              monthlyTotalCents: partD.monthlyTotalCents - txn.amountCents,
+            }).where(eq(ledgerParts.id, partD.id));
+          }
+        }
+      }
     } else if (txn.type === 'spend') {
       await db.update(piggyBanks).set({
         [isAccount ? 'balanceOnAccountCents' : 'balanceCashCents']: currentBal + txn.amountCents,
@@ -153,14 +214,23 @@ export function usePiggyBanks() {
     note?: string;
   }): Promise<void> => {
     const [pb] = await db.select().from(piggyBanks).where(eq(piggyBanks.id, params.piggyBankId));
-    if (!pb) return;
+    if (!pb) throw new Error('Piggy bank not found.');
 
     const balanceField = params.balanceType === 'account' ? 'balanceOnAccountCents' : 'balanceCashCents';
+    const availableBalance = params.balanceType === 'account' ? pb.balanceOnAccountCents : pb.balanceCashCents;
+    if (params.amountCents <= 0 || params.amountCents > availableBalance) {
+      throw new Error(`The ${params.balanceType} balance is too low.`);
+    }
+
+    const parts = await db.select().from(ledgerParts).where(
+      and(eq(ledgerParts.periodId, params.periodId), eq(ledgerParts.partType, 'D'))
+    );
+    if (!parts[0]) throw new Error('The selected month has no Spending part.');
 
     await db
       .update(piggyBanks)
       .set({
-        [balanceField]: (params.balanceType === 'account' ? pb.balanceOnAccountCents : pb.balanceCashCents) - params.amountCents,
+        [balanceField]: availableBalance - params.amountCents,
         totalRemovedAllTimeCents: pb.totalRemovedAllTimeCents + params.amountCents,
       })
       .where(eq(piggyBanks.id, params.piggyBankId));
@@ -169,23 +239,16 @@ export function usePiggyBanks() {
       piggyBankId: params.piggyBankId,
       date: params.date,
       amountCents: params.amountCents,
-      type: 'remove',
+      type: 'return',
       balanceType: params.balanceType,
       note: params.note ?? `Returned to Spending`,
       createdAt: nowIso(),
     });
 
-    // Return money to Part D balance
-    const { ledgerParts } = await import('@/db/schema');
-    const { and: andI, eq: eqI } = await import('drizzle-orm');
-    const parts = await db.select().from(ledgerParts).where(
-      andI(eqI(ledgerParts.periodId, params.periodId), eqI(ledgerParts.partType, 'D'))
-    );
-    if (parts[0]) {
-      await db.update(ledgerParts).set({
-        currentBalanceCents: parts[0].currentBalanceCents + params.amountCents,
-      }).where(eqI(ledgerParts.id, parts[0].id));
-    }
+    await db.update(ledgerParts).set({
+      currentBalanceCents: parts[0].currentBalanceCents + params.amountCents,
+      monthlyTotalCents: parts[0].monthlyTotalCents + params.amountCents,
+    }).where(eq(ledgerParts.id, parts[0].id));
   }, []);
 
   /**
@@ -283,6 +346,7 @@ export function usePiggyBanks() {
     updatePiggyBank,
     archivePiggyBank,
     unarchivePiggyBank,
+    deletePiggyBank,
     returnToSpending,
     spendFromPiggyBank,
     deleteTransaction,

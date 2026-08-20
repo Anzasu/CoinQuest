@@ -220,6 +220,95 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     });
   }
 
+  const customDonationAmounts = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM app_migrations WHERE name = 'custom_donation_amounts'`,
+  );
+  if (!customDonationAmounts) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        UPDATE monthly_periods
+        SET part_d_amount_cents = part_d_amount_cents + donation_goal_amount_cents
+        WHERE donation_goal_amount_cents > 0;
+
+        UPDATE ledger_parts
+        SET
+          starting_amount_cents = starting_amount_cents + COALESCE((
+            SELECT required_amount_cents FROM donation_records
+            WHERE donation_records.period_id = ledger_parts.period_id
+          ), 0),
+          monthly_total_cents = monthly_total_cents + COALESCE((
+            SELECT required_amount_cents FROM donation_records
+            WHERE donation_records.period_id = ledger_parts.period_id
+          ), 0),
+          current_balance_cents = current_balance_cents + CASE
+            WHEN COALESCE((
+              SELECT status FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 'pending') = 'completed' THEN 0
+            ELSE COALESCE((
+              SELECT required_amount_cents FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 0)
+          END,
+          transferred_out_amount_cents = transferred_out_amount_cents + CASE
+            WHEN COALESCE((
+              SELECT status FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 'pending') = 'completed' THEN COALESCE((
+              SELECT completed_amount_cents FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 0)
+            ELSE 0
+          END
+        WHERE part_type = 'D';
+
+        INSERT INTO app_migrations (name, applied_at)
+        VALUES ('custom_donation_amounts', datetime('now'));
+      `);
+    });
+  }
+
+  const externalIncomeTotals = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM app_migrations WHERE name = 'include_external_income_in_part_d_totals'`,
+  );
+  if (!externalIncomeTotals) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        UPDATE ledger_parts
+        SET monthly_total_cents = monthly_total_cents + COALESCE((
+          SELECT SUM(amount_cents)
+          FROM external_income
+          WHERE external_income.period_id = ledger_parts.period_id
+        ), 0)
+        WHERE part_type = 'D';
+
+        INSERT INTO app_migrations (name, applied_at)
+        VALUES ('include_external_income_in_part_d_totals', datetime('now'));
+      `);
+    });
+  }
+
+  const piggyTransferTracking = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM app_migrations WHERE name = 'track_piggy_transfers_from_spending'`,
+  );
+  if (!piggyTransferTracking) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        UPDATE ledger_parts
+        SET transferred_out_amount_cents = transferred_out_amount_cents + COALESCE((
+          SELECT SUM(amount_cents)
+          FROM transfers
+          WHERE transfers.period_id = ledger_parts.period_id
+            AND transfers.transfer_type = 'DtoPiggyBank'
+        ), 0)
+        WHERE part_type = 'D';
+
+        INSERT INTO app_migrations (name, applied_at)
+        VALUES ('track_piggy_transfers_from_spending', datetime('now'));
+      `);
+    });
+  }
+
   // Seed app_settings singleton if not present
   await db.execAsync(`INSERT OR IGNORE INTO app_settings (id, theme, user_name, created_at, updated_at)
     VALUES (1, 'lightBrown', 'Me', datetime('now'), datetime('now'));`);

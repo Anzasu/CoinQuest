@@ -1,24 +1,26 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Text, Surface, Button } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { formatCents } from '@/lib/money';
 import type { DonationRecord } from '@/hooks/useDonation';
+import { MoneyInput } from '@/components/MoneyInput';
 
 interface DonationCardProps {
   record: DonationRecord | undefined;
-  onComplete: () => void;
-  onUndo: () => void;
-  onPress: () => void;
+  onComplete: (amountCents: number) => Promise<void>;
+  onUndo: () => Promise<void>;
 }
 
-export function DonationCard({ record, onComplete, onUndo, onPress }: DonationCardProps) {
+export function DonationCard({ record, onComplete, onUndo }: DonationCardProps) {
   const theme = useAppTheme();
+  const [amountCents, setAmountCents] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
   if (!record) {
     return (
       <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
-        <Text style={{ color: theme.colors.onSurface + '66' }}>No active month — start a new month to see donation goal.</Text>
+        <Text style={{ color: theme.colors.onSurface + '66' }}>No active month — start a new month to see the donation recommendation.</Text>
       </Surface>
     );
   }
@@ -28,8 +30,7 @@ export function DonationCard({ record, onComplete, onUndo, onPress }: DonationCa
   const statusColor = isCompleted ? theme.custom.partC : isMissed ? theme.colors.error : theme.custom.partD;
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-      <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: statusColor }]}>
+    <Surface style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: statusColor }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.colors.onSurface }]}>Monthly Donation</Text>
           <View style={[styles.status, { backgroundColor: statusColor + '22' }]}>
@@ -40,20 +41,55 @@ export function DonationCard({ record, onComplete, onUndo, onPress }: DonationCa
         </View>
         <Text style={[styles.amount, { color: statusColor }]}>{formatCents(record.requiredAmountCents)}</Text>
         <Text style={[styles.sub, { color: theme.colors.onSurface + '66' }]}>
-          25% of Spending
+          Recommended amount (25% of Spending)
         </Text>
         {!isCompleted && !isMissed && (
-          <Button mode="contained" onPress={onComplete} style={styles.btn} compact>
-            Mark as Donated
-          </Button>
+          <>
+            <MoneyInput label="Donation amount" valueCents={amountCents} onChange={setAmountCents} />
+            <Button
+              mode="contained"
+              onPress={async () => {
+                if (!amountCents || amountCents <= 0) return;
+                setSaving(true);
+                try {
+                  await onComplete(amountCents);
+                  setAmountCents(null);
+                } catch {
+                  // The parent displays the validation error.
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              style={styles.btn}
+              compact
+              loading={saving}
+              disabled={saving || !amountCents || amountCents <= 0}
+            >
+              Donation done
+            </Button>
+          </>
         )}
         {isCompleted && (
-          <Button mode="text" onPress={onUndo} style={styles.btn} compact textColor={theme.colors.onSurface + '66'}>
+          <Button
+            mode="text"
+            onPress={async () => {
+              setSaving(true);
+              try {
+                await onUndo();
+              } finally {
+                setSaving(false);
+              }
+            }}
+            style={styles.btn}
+            compact
+            textColor={theme.colors.onSurface + '66'}
+            loading={saving}
+            disabled={saving}
+          >
             Undo
           </Button>
         )}
-      </Surface>
-    </TouchableOpacity>
+    </Surface>
   );
 }
 

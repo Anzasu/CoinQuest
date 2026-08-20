@@ -9,7 +9,7 @@ interface PartCardProps {
   label: string;
   description: string;
   currentBalance: number;
-  monthlyTotal: number;
+  monthlyBalance: number;
   onPress: () => void;
   extra?: { label: string; value: number }[];
 }
@@ -21,7 +21,7 @@ const PART_DESCRIPTIONS: Record<string, string> = {
   D: 'General spending',
 };
 
-export function PartCard({ part, label, description, currentBalance, monthlyTotal, onPress, extra }: PartCardProps) {
+export function PartCard({ part, label, description, currentBalance, monthlyBalance, onPress, extra }: PartCardProps) {
   const theme = useAppTheme();
   const colors = {
     A: theme.custom.partA,
@@ -42,7 +42,7 @@ export function PartCard({ part, label, description, currentBalance, monthlyTota
           <Text style={[styles.desc, { color: theme.colors.onSurface + '88' }]}>{description}</Text>
           <Text style={[styles.balance, { color }]}>{formatCents(currentBalance)}</Text>
           <Text style={[styles.monthly, { color: theme.colors.onSurface + '66' }]}>
-            This month: {formatCents(monthlyTotal)}
+            This month: {formatCents(monthlyBalance)}
           </Text>
           {extra?.map((e) => (
             <Text key={e.label} style={[styles.monthly, { color: theme.colors.onSurface + '66' }]}>

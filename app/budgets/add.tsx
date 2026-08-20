@@ -10,11 +10,13 @@ import { EXPENSE_CATEGORIES, type ExpenseCategory } from '@/lib/categories';
 import { nowIso } from '@/lib/dates';
 import { and, eq } from 'drizzle-orm';
 import { budgetStatus } from '@/lib/money';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AddBudgetScreen() {
   const { periodId: pidParam } = useLocalSearchParams<{ periodId?: string }>();
   const theme = useAppTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [category, setCategory] = useState<ExpenseCategory | null>(null);
   const [limitCents, setLimitCents] = useState<number | null>(null);
@@ -89,7 +91,7 @@ export default function AddBudgetScreen() {
         <View style={{ height: 16 }} />
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder }]}>
+      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder, paddingBottom: 16 + insets.bottom }]}>
         <Button mode="outlined" onPress={() => router.back()}>Cancel</Button>
         <Button mode="contained" onPress={handleSave} loading={saving} disabled={saving} style={{ flex: 1 }}>
           Save Budget

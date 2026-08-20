@@ -18,6 +18,7 @@ export const EXPENSE_CATEGORIES = [
   'Internet',
   'Debt',
   'Investments',
+  'Legacy',
   'Other',
 ] as const;
 
@@ -44,5 +45,6 @@ export const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
   Internet: 'wifi',
   Debt: 'bank',
   Investments: 'chart-line',
+  Legacy: 'history',
   Other: 'dots-horizontal',
 };

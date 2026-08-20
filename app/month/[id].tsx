@@ -9,18 +9,19 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useTransfers } from '@/hooks/useTransfers';
 import { useDonation } from '@/hooks/useDonation';
 import { useExternalIncome } from '@/hooks/useExternalIncome';
-import { useLegacyImport } from '@/hooks/useLegacyImport';
 import { formatCents } from '@/lib/money';
 import { formatDateDisplay, formatMonthYear } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { MoneyInput } from '@/components/MoneyInput';
 import { db } from '@/db';
-import { budgets, ledgerParts as ledgerPartsTable, monthlyPeriods } from '@/db/schema';
+import { budgets, monthlyPeriods } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Period, LedgerPart } from '@/hooks/usePeriods';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Transfer } from '@/hooks/useTransfers';
 import type { ExternalIncome } from '@/hooks/useExternalIncome';
+import { getPartBalanceSummaries } from '@/lib/partBalances';
 
 type Tab = 'A' | 'B' | 'C' | 'D' | 'budget' | 'donation' | 'income';
 
@@ -33,7 +34,6 @@ export default function MonthDetailScreen() {
   const { getTransfersForPeriod, deleteTransfer } = useTransfers();
   const { getDonationRecord, completeDonation, undoDonation } = useDonation();
   const { getForPeriod, deleteExternalIncome } = useExternalIncome();
-  const { getLegacyTotals } = useLegacyImport();
   const [period, setPeriod] = useState<Period | null>(null);
   const [parts, setParts] = useState<LedgerPart[]>([]);
   const [overallInAccount, setOverallInAccount] = useState<Record<string, number>>({ A: 0, B: 0, C: 0, D: 0 });
@@ -44,6 +44,7 @@ export default function MonthDetailScreen() {
   const [periodBudgets, setPeriodBudgets] = useState<any[]>([]);
   const [tab, setTab] = useState<Tab>((initialTab as Tab) ?? 'D');
   const [closeDialog, setCloseDialog] = useState(false);
+  const [undoingDonation, setUndoingDonation] = useState(false);
 
   const periodId = Number(id);
 
@@ -63,22 +64,13 @@ export default function MonthDetailScreen() {
         setIncome(inc);
         setPeriodBudgets(await db.select().from(budgets).where(eq(budgets.periodId, periodId)));
 
-        // Compute overall_in_account per part:
-        // overall = sum of monthlyTotalCents across ALL periods + legacy imports
-        // overall_in_account = overall - spentAmountCents_sum - transferredOutAmountCents_sum - withdrawnCashAmountCents_sum
-        const allRows = await db.select().from(ledgerPartsTable);
-        const legacy = await getLegacyTotals();
+        const summaries = await getPartBalanceSummaries();
         const oia: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
         for (const partKey of ['A', 'B', 'C', 'D'] as const) {
-          const rows = allRows.filter((r) => r.partType === partKey);
-          const overall = rows.reduce((s, r) => s + r.monthlyTotalCents, 0) + (legacy[partKey] ?? 0);
-          const spent = rows.reduce((s, r) => s + r.spentAmountCents, 0);
-          const transferred = rows.reduce((s, r) => s + r.transferredOutAmountCents, 0);
-          const withdrawn = rows.reduce((s, r) => s + r.withdrawnCashAmountCents, 0);
-          oia[partKey] = overall - spent - transferred - withdrawn;
+          oia[partKey] = summaries[partKey].remainingCents;
         }
         setOverallInAccount(oia);
-  }, [periodId, getPeriod, getLedgerParts, getExpensesForPeriod, getTransfersForPeriod, getDonationRecord, getForPeriod, getLegacyTotals]);
+  }, [periodId, getPeriod, getLedgerParts, getExpensesForPeriod, getTransfersForPeriod, getDonationRecord, getForPeriod]);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,6 +92,17 @@ export default function MonthDetailScreen() {
     await reopenPeriod(periodId);
     const updated = await getPeriod(periodId);
     setPeriod(updated ?? null);
+  }
+
+  async function handleUndoDonation() {
+    if (undoingDonation) return;
+    setUndoingDonation(true);
+    try {
+      await undoDonation(periodId);
+      await load();
+    } finally {
+      setUndoingDonation(false);
+    }
   }
 
   function handleDeleteBudget(budget: any) {
@@ -177,7 +180,9 @@ export default function MonthDetailScreen() {
             transfers={transfers.filter((t) => t.sourcePart === tab)}
             theme={theme}
             period={period}
+            donation={donation}
             overallInAccount={overallInAccount[tab] ?? 0}
+            onUndoDonation={handleUndoDonation}
             onDeleteExpense={async (id: number) => { await deleteExpense(id); await load(); }}
             onDeleteTransfer={async (id: number) => { await deleteTransfer(id); await load(); }}
             router={router}
@@ -189,13 +194,33 @@ export default function MonthDetailScreen() {
           <IncomeView
             income={income}
             theme={theme}
-            onDelete={async (id: number) => { await deleteExternalIncome(id); await load(); }}
+            onDelete={async (id: number) => {
+              try {
+                await deleteExternalIncome(id);
+                await load();
+              } catch (error: any) {
+                Alert.alert('Income not deleted', error.message ?? 'Could not delete income');
+              }
+            }}
             onAdd={() => router.push({ pathname: '/income/add', params: { periodId } })}
           />
         )}
 
         {tab === 'donation' && (
-          <DonationView donation={donation} theme={theme} onComplete={async () => { await completeDonation(periodId); await load(); }} onUndo={async () => { await undoDonation(periodId); await load(); }} />
+          <DonationView
+            donation={donation}
+            theme={theme}
+            onComplete={async (amountCents: number) => {
+              try {
+                await completeDonation(periodId, amountCents);
+                await load();
+              } catch (error: any) {
+                Alert.alert('Donation not saved', error.message ?? 'Could not complete donation');
+                throw error;
+              }
+            }}
+            onUndo={handleUndoDonation}
+          />
         )}
 
         {tab === 'budget' && <BudgetView period={period} budgets={periodBudgets} theme={theme} router={router} periodId={periodId} onDelete={handleDeleteBudget} />}
@@ -215,7 +240,7 @@ export default function MonthDetailScreen() {
   );
 }
 
-function PartDetailView({ part, tab, expenses, transfers, theme, period, overallInAccount, onDeleteExpense, onDeleteTransfer, router, periodId }: any) {
+function PartDetailView({ part, tab, expenses, transfers, theme, period, donation, overallInAccount, onUndoDonation, onDeleteExpense, onDeleteTransfer, router, periodId }: any) {
   const partColors = { A: theme.custom.partA, B: theme.custom.partB, C: theme.custom.partC, D: theme.custom.partD };
   const color = partColors[tab as 'A' | 'B' | 'C' | 'D'];
 
@@ -235,7 +260,7 @@ function PartDetailView({ part, tab, expenses, transfers, theme, period, overall
         <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Overall in account</Text>
         <Text style={[styles.balance, { color }]}>{formatCents(overallInAccount)}</Text>
         <View style={styles.statRow}>
-          <Stat label="This month" value={part?.monthlyTotalCents ?? 0} theme={theme} />
+          <Stat label="This month" value={part?.currentBalanceCents ?? 0} theme={theme} />
           {(tab === 'A' || tab === 'B') && (
             <>
               <Stat label="Transferred" value={part?.transferredOutAmountCents ?? 0} theme={theme} negative />
@@ -251,6 +276,15 @@ function PartDetailView({ part, tab, expenses, transfers, theme, period, overall
           )}
         </View>
       </Surface>
+
+      {tab === 'D' && donation?.status === 'completed' && (
+        <Surface style={[styles.txnRow, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
+          <View style={styles.txnContent}>
+            <Text style={[styles.txnTitle, { color: theme.colors.onSurface }]}>Donation done</Text>
+          </View>
+          <Text style={[styles.deleteBtn, { color: theme.colors.error + '77' }]} onPress={onUndoDonation}>✕</Text>
+        </Surface>
+      )}
 
       {tab === 'D' && categoryRows.length > 0 && (
         <>
@@ -365,15 +399,59 @@ function IncomeView({ income, theme, onDelete, onAdd }: any) {
 }
 
 function DonationView({ donation, theme, onComplete, onUndo }: any) {
+  const [amountCents, setAmountCents] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
   if (!donation) return <EmptyState icon="hand-heart" title="No donation record" description="Start a new month to create a donation record." />;
   const statusColor = donation.status === 'completed' ? theme.custom.partC : donation.status === 'missed' ? theme.colors.error : theme.custom.partD;
   return (
     <Surface style={[styles.donationCard, { backgroundColor: theme.colors.surface, borderColor: statusColor }]}>
-      <Text style={[styles.donLabel, { color: theme.colors.onSurface + '77' }]}>Donation goal</Text>
+      <Text style={[styles.donLabel, { color: theme.colors.onSurface + '77' }]}>Recommended donation</Text>
       <Text style={[styles.donAmount, { color: statusColor }]}>{formatCents(donation.requiredAmountCents)}</Text>
+      <Text style={[styles.txnMeta, { color: theme.colors.onSurface + '66' }]}>25% of Spending</Text>
       <Text style={[styles.donStatus, { color: statusColor }]}>{donation.status === 'completed' ? '✓ Completed' : donation.status === 'missed' ? 'Missed' : 'Pending'}</Text>
-      {donation.status === 'pending' && <Button mode="contained" onPress={onComplete} style={{ marginTop: 8 }}>Mark as Donated</Button>}
-      {donation.status === 'completed' && <Button mode="text" onPress={onUndo} style={{ marginTop: 4 }}>Undo</Button>}
+      {donation.status === 'pending' && (
+        <>
+          <MoneyInput label="Donation amount" valueCents={amountCents} onChange={setAmountCents} />
+          <Button
+            mode="contained"
+            onPress={async () => {
+              if (!amountCents || amountCents <= 0) return;
+              setSaving(true);
+              try {
+                await onComplete(amountCents);
+                setAmountCents(null);
+              } catch {
+                // The parent displays the validation error.
+              } finally {
+                setSaving(false);
+              }
+            }}
+            loading={saving}
+            disabled={saving || !amountCents || amountCents <= 0}
+            style={{ marginTop: 8 }}
+          >
+            Donation done
+          </Button>
+        </>
+      )}
+      {donation.status === 'completed' && (
+        <Button
+          mode="text"
+          onPress={async () => {
+            setSaving(true);
+            try {
+              await onUndo();
+            } finally {
+              setSaving(false);
+            }
+          }}
+          loading={saving}
+          disabled={saving}
+          style={{ marginTop: 4 }}
+        >
+          Undo
+        </Button>
+      )}
     </Surface>
   );
 }

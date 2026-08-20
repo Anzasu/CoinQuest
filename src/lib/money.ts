@@ -50,7 +50,7 @@ export function remainingAfterBills(salaryAmountCents: number, totalBillsCents: 
 }
 
 /**
- * Donation goal = 25% of Part D before any spending.
+ * Recommended donation = 25% of Part D before any spending.
  * Stored as an exact integer (floor). The spec does not specify rounding direction,
  * so we use floor to avoid over-committing.
  */

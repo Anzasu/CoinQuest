@@ -5,10 +5,12 @@ import { useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { usePiggyBanks } from '@/hooks/usePiggyBanks';
 import { MoneyInput } from '@/components/MoneyInput';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function NewPiggyBankScreen() {
   const theme = useAppTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { createPiggyBank } = usePiggyBanks();
 
   const [name, setName] = useState('');
@@ -71,7 +73,7 @@ export default function NewPiggyBankScreen() {
         <View style={{ height: 16 }} />
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder }]}>
+      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.custom.cardBorder, paddingBottom: 16 + insets.bottom }]}>
         <Button mode="outlined" onPress={() => router.back()}>Cancel</Button>
         <Button mode="contained" onPress={handleSave} loading={saving} disabled={saving} style={styles.saveBtn}>
           Create Piggy Bank

@@ -9,10 +9,12 @@ import { useBills, type BillTemplate } from '@/hooks/useBills';
 import { MoneyInput } from '@/components/MoneyInput';
 import { formatCents } from '@/lib/money';
 import { EmptyState } from '@/components/EmptyState';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function BillsListScreen() {
   const theme = useAppTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { getAllTemplates, createTemplate, updateTemplate, deleteTemplate } = useBills();
 
   const [templates, setTemplates] = useState<BillTemplate[]>([]);
@@ -99,10 +101,10 @@ export default function BillsListScreen() {
             </Surface>
           ))
         )}
-        <View style={{ height: 80 }} />
+        <View style={{ height: 80 + insets.bottom }} />
       </ScrollView>
 
-      <FAB icon="plus" style={[styles.fab, { backgroundColor: theme.colors.primary }]} color="#fff" onPress={openAdd} />
+      <FAB icon="plus" style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: 16 + insets.bottom }]} color="#fff" onPress={openAdd} />
 
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>

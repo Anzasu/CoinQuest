@@ -11,9 +11,8 @@ import { PartCard } from '@/components/PartCard';
 import { EmptyState } from '@/components/EmptyState';
 import { formatCents } from '@/lib/money';
 import { formatMonthYear } from '@/lib/dates';
-import { db } from '@/db';
-import { ledgerParts } from '@/db/schema';
 import type { Period, LedgerPart } from '@/hooks/usePeriods';
+import { getPartBalanceSummaries } from '@/lib/partBalances';
 
 type PartKey = 'A' | 'B' | 'C' | 'D';
 
@@ -64,26 +63,16 @@ export default function PartsScreen() {
         const lt = await getLegacyTotals();
         setLegacyTotals(lt);
 
-        // All-time: sum monthlyTotalCents across all periods + legacy
-        const allRows = await db.select().from(ledgerParts);
+        const summaries = await getPartBalanceSummaries();
         const totals: Record<PartKey, number> = { A: 0, B: 0, C: 0, D: 0 };
-        for (const row of allRows) {
-          totals[row.partType as PartKey] = (totals[row.partType as PartKey] ?? 0) + row.monthlyTotalCents;
-        }
         for (const k of ['A', 'B', 'C', 'D'] as PartKey[]) {
-          totals[k] = (totals[k] ?? 0) + (lt[k] ?? 0);
+          totals[k] = summaries[k].remainingCents;
         }
         setAllTimeTotals(totals);
 
-        // Overall in account per part: all months + legacy - spent - transferred - withdrawn
         const oia: Record<PartKey, number> = { A: 0, B: 0, C: 0, D: 0 };
         for (const k of ['A', 'B', 'C', 'D'] as PartKey[]) {
-          const rows = allRows.filter((r) => r.partType === k);
-          const overall = rows.reduce((s, r) => s + r.monthlyTotalCents, 0) + (lt[k] ?? 0);
-          const spent = rows.reduce((s, r) => s + r.spentAmountCents, 0);
-          const transferred = rows.reduce((s, r) => s + r.transferredOutAmountCents, 0);
-          const withdrawn = rows.reduce((s, r) => s + r.withdrawnCashAmountCents, 0);
-          oia[k] = overall - spent - transferred - withdrawn;
+          oia[k] = summaries[k].remainingCents;
         }
         setOverallInAccount(oia);
       }
@@ -134,7 +123,7 @@ export default function PartsScreen() {
             <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Overall in account</Text>
             <Text style={[styles.balanceBig, { color }]}>{formatCents(overallInAccount[selectedPart] ?? 0)}</Text>
             <View style={styles.statRow}>
-              <StatBox label="Started with" value={part?.monthlyTotalCents ?? 0} theme={theme} />
+              <StatBox label="This month" value={part?.currentBalanceCents ?? 0} theme={theme} />
               {(selectedPart === 'A' || selectedPart === 'B') && (
                 <>
                   <StatBox label="Transferred out" value={part?.transferredOutAmountCents ?? 0} theme={theme} negative />
@@ -153,10 +142,10 @@ export default function PartsScreen() {
             </View>
           </Surface>
 
-          {/* All-time balance card */}
-          <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ALL-TIME TOTAL</Text>
+          {/* All-time remaining balance card */}
+          <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>ALL-TIME BALANCE</Text>
           <Surface style={[styles.balanceCard, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
-            <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>All months + legacy imports</Text>
+            <Text style={[styles.balanceLabel, { color: theme.colors.onSurface + '77' }]}>Income minus spending and outflows</Text>
             <Text style={[styles.balanceMid, { color: theme.colors.onSurface }]}>{formatCents(allTimeTotals[selectedPart] ?? 0)}</Text>
             {(legacyTotals[selectedPart] ?? 0) > 0 && (
               <Text style={[styles.legacyNote, { color: theme.colors.onSurface + '66' }]}>
@@ -243,7 +232,7 @@ export default function PartsScreen() {
           <Row label="B&M Savings (25%)" value={activePeriod.partAAmountCents} theme={theme} color={theme.custom.partA} />
           <Row label="B&M Expenses (25%)" value={activePeriod.partBAmountCents} theme={theme} color={theme.custom.partB} />
           <Row label="Emergency Fund (25%)" value={activePeriod.partCAmountCents} theme={theme} color={theme.custom.partC} />
-          <Row label="Spending after donation" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
+          <Row label="Spending (25%)" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
         </View>
 
         <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>B&M SAVINGS</Text>
@@ -252,7 +241,7 @@ export default function PartsScreen() {
           label="B&M Savings"
           description="Held for third party"
           currentBalance={overallInAccount.A}
-          monthlyTotal={getPart('A')?.monthlyTotalCents ?? 0}
+          monthlyBalance={getPart('A')?.currentBalanceCents ?? 0}
           onPress={() => setSelectedPart('A')}
           extra={[
             { label: 'Transferred out', value: getPart('A')?.transferredOutAmountCents ?? 0 },
@@ -266,7 +255,7 @@ export default function PartsScreen() {
           label="B&M Expenses"
           description="Held for third party"
           currentBalance={overallInAccount.B}
-          monthlyTotal={getPart('B')?.monthlyTotalCents ?? 0}
+          monthlyBalance={getPart('B')?.currentBalanceCents ?? 0}
           onPress={() => setSelectedPart('B')}
           extra={[
             { label: 'Transferred out', value: getPart('B')?.transferredOutAmountCents ?? 0 },
@@ -280,7 +269,7 @@ export default function PartsScreen() {
           label="Emergency Fund"
           description="Protected reserve"
           currentBalance={overallInAccount.C}
-          monthlyTotal={getPart('C')?.monthlyTotalCents ?? 0}
+          monthlyBalance={getPart('C')?.currentBalanceCents ?? 0}
           onPress={() => setSelectedPart('C')}
           extra={[
             { label: 'Cash withdrawn', value: getPart('C')?.withdrawnCashAmountCents ?? 0 },
@@ -293,7 +282,7 @@ export default function PartsScreen() {
           label="Spending"
           description="General spending pot"
           currentBalance={overallInAccount.D}
-          monthlyTotal={getPart('D')?.monthlyTotalCents ?? 0}
+          monthlyBalance={getPart('D')?.currentBalanceCents ?? 0}
           onPress={() => setSelectedPart('D')}
           extra={[
             { label: 'Total spent', value: getPart('D')?.spentAmountCents ?? 0 },

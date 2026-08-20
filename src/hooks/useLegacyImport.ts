@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { legacyPartImports } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { nowIso, todayIso } from '@/lib/dates';
+import { getOverallPartBalance } from '@/lib/partBalances';
 
 export type LegacyPartImport = typeof legacyPartImports.$inferSelect;
 
@@ -44,6 +45,12 @@ export function useLegacyImport() {
   }, []);
 
   const deleteImport = useCallback(async (id: number): Promise<void> => {
+    const [record] = await db.select().from(legacyPartImports).where(eq(legacyPartImports.id, id));
+    if (!record) return;
+    const overallAvailable = await getOverallPartBalance(record.partType as 'A' | 'B' | 'C' | 'D');
+    if (record.amountCents > overallAvailable) {
+      throw new Error('This legacy amount cannot be deleted because part of it has already been spent.');
+    }
     await db.delete(legacyPartImports).where(eq(legacyPartImports.id, id));
   }, []);
 

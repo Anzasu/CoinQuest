@@ -3,7 +3,7 @@ import {
   View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform
 } from 'react-native';
 import {
-  Text, Button, TextInput, Divider, IconButton, Surface, Appbar
+  Text, Button, TextInput, Divider, IconButton, Surface, Appbar, Menu
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -11,7 +11,7 @@ import { usePeriods } from '@/hooks/usePeriods';
 import { useBills } from '@/hooks/useBills';
 import { MoneyInput } from '@/components/MoneyInput';
 import { splitSalary, remainingAfterBills, calculateDonationGoal, formatCents } from '@/lib/money';
-import { currentMonth, formatMonthYear, resolveNewMonthTarget } from '@/lib/dates';
+import { currentMonth, formatMonthYear, listAvailableNewMonthTargets, type MonthYear } from '@/lib/dates';
 
 interface BillRow {
   templateId?: number;
@@ -26,11 +26,13 @@ type Step = 'salary' | 'bills' | 'preview';
 export default function NewMonthScreen() {
   const theme = useAppTheme();
   const router = useRouter();
-  const { startNewMonth, getPeriodByMonthYear } = usePeriods();
+  const { startNewMonth, getAllPeriods } = usePeriods();
   const { getActiveTemplates } = useBills();
 
   const [targetMonth, setTargetMonth] = useState<number | null>(null);
   const [targetYear, setTargetYear] = useState<number | null>(null);
+  const [availableMonths, setAvailableMonths] = useState<MonthYear[]>([]);
+  const [monthMenuVisible, setMonthMenuVisible] = useState(false);
   const [step, setStep] = useState<Step>('salary');
   const [salary, setSalary] = useState<number | null>(null);
   const [salaryError, setSalaryError] = useState('');
@@ -41,24 +43,23 @@ export default function NewMonthScreen() {
   useEffect(() => {
     async function load() {
       const current = currentMonth();
-      const currentPeriod = await getPeriodByMonthYear(current.month, current.year);
-      const next = current.month === 12
-        ? { month: 1, year: current.year + 1 }
-        : { month: current.month + 1, year: current.year };
-      const nextPeriod = currentPeriod
-        ? await getPeriodByMonthYear(next.month, next.year)
-        : undefined;
-      const target = resolveNewMonthTarget(current, !!currentPeriod, !!nextPeriod);
+      const periods = await getAllPeriods();
+      const targets = listAvailableNewMonthTargets(
+        current,
+        periods.map((period) => ({ month: period.month, year: period.year })),
+      );
+      const target = targets[0];
 
       if (!target) {
         Alert.alert(
-          'Months already exist',
-          `${formatMonthYear(current.month, current.year)} and ${formatMonthYear(next.month, next.year)} have already been created.`,
+          'No month available',
+          'The current month, next month, and all twelve previous months have already been created.',
           [{ text: 'OK', onPress: () => router.back() }],
         );
         return;
       }
 
+      setAvailableMonths(targets);
       setTargetMonth(target.month);
       setTargetYear(target.year);
 
@@ -200,6 +201,29 @@ export default function NewMonthScreen() {
       >
         {step === 'salary' && (
           <View style={styles.form}>
+            <Text style={[styles.formTitle, { color: theme.colors.onBackground }]}>Month</Text>
+            <Menu
+              visible={monthMenuVisible}
+              onDismiss={() => setMonthMenuVisible(false)}
+              anchor={
+                <Button mode="outlined" icon="calendar-month" onPress={() => setMonthMenuVisible(true)}>
+                  {formatMonthYear(targetMonth, targetYear)}
+                </Button>
+              }
+            >
+              {availableMonths.map((month) => (
+                <Menu.Item
+                  key={`${month.year}-${month.month}`}
+                  title={formatMonthYear(month.month, month.year)}
+                  onPress={() => {
+                    setTargetMonth(month.month);
+                    setTargetYear(month.year);
+                    setMonthMenuVisible(false);
+                  }}
+                />
+              ))}
+            </Menu>
+            <Divider style={{ marginVertical: 8 }} />
             <Text style={[styles.formTitle, { color: theme.colors.onBackground }]}>Enter your salary</Text>
             <Text style={[styles.formSub, { color: theme.colors.onBackground + '77' }]}>
               Net salary after tax for {formatMonthYear(targetMonth, targetYear)}.
@@ -269,9 +293,9 @@ export default function NewMonthScreen() {
             <PreviewRow label="B&M Savings (25%)" value={split.partA} color={theme.custom.partA} theme={theme} />
             <PreviewRow label="B&M Expenses (25%)" value={split.partB} color={theme.custom.partB} theme={theme} />
             <PreviewRow label="Emergency Fund (25%)" value={split.partC} color={theme.custom.partC} theme={theme} />
-            <PreviewRow label="Spending after donation" value={split.partD - donationGoal} color={theme.custom.partD} theme={theme} />
+            <PreviewRow label="Spending (25%)" value={split.partD} color={theme.custom.partD} theme={theme} />
             <Divider style={{ marginVertical: 8 }} />
-            <PreviewRow label="Donation goal (25% of D)" value={donationGoal} color={theme.colors.secondary} theme={theme} />
+            <PreviewRow label="Recommended donation (25% of D)" value={donationGoal} color={theme.colors.secondary} theme={theme} />
             {budgetCents != null && (
               <PreviewRow label="Monthly budget" value={budgetCents} color={theme.colors.primary} theme={theme} />
             )}
