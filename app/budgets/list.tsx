@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Appbar, Surface, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { usePeriods } from '@/hooks/usePeriods';
 import { db } from '@/db';
-import { budgets } from '@/db/schema';
+import { budgets, monthlyPeriods } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { formatCents } from '@/lib/money';
 import { formatMonthYear } from '@/lib/dates';
@@ -36,12 +36,48 @@ export default function BudgetsListScreen() {
     return p ? formatMonthYear(p.month, p.year) : '?';
   };
 
+  function handleAdd() {
+    const now = new Date();
+    const target = periods.find((period) => period.month === now.getMonth() + 1 && period.year === now.getFullYear())
+      ?? periods.find((period) => period.status === 'open')
+      ?? periods[0];
+    if (!target) {
+      Alert.alert('No month available', 'Start a month before adding a category budget.');
+      return;
+    }
+    router.push({ pathname: '/budgets/add', params: { periodId: target.id } });
+  }
+
+  function handleDelete(budget: any) {
+    Alert.alert(
+      'Delete budget?',
+      `Delete the ${budget.scope === 'overall' ? 'overall' : budget.category} budget for ${getPeriodLabel(budget.periodId)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await db.delete(budgets).where(eq(budgets.id, budget.id));
+            if (budget.scope === 'overall') {
+              await db
+                .update(monthlyPeriods)
+                .set({ monthlyBudgetLimitCents: null })
+                .where(eq(monthlyPeriods.id, budget.periodId));
+            }
+            setAllBudgets((current) => current.filter((item) => item.id !== budget.id));
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} color={theme.colors.primary} />
         <Appbar.Content title="Budgets" color={theme.colors.onSurface} />
-        <Appbar.Action icon="plus" onPress={() => router.push('/budgets/add')} color={theme.colors.primary} />
+        <Appbar.Action icon="plus" onPress={handleAdd} color={theme.colors.primary} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -62,6 +98,7 @@ export default function BudgetsListScreen() {
                   </Text>
                 </Text>
               </View>
+              <Button compact mode="text" icon="delete" textColor={theme.colors.error} onPress={() => handleDelete(b)}>Delete</Button>
             </Surface>
           ))
         )}
@@ -74,7 +111,7 @@ export default function BudgetsListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: 16, gap: 8 },
-  row: { borderRadius: 10, borderWidth: 1, padding: 14 },
+  row: { borderRadius: 10, borderWidth: 1, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowTitle: { fontSize: 15, fontWeight: '600' },
   rowSub: { fontSize: 13, marginTop: 2 },
 });

@@ -15,7 +15,8 @@ import { formatDateDisplay, formatMonthYear } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { db } from '@/db';
-import { ledgerParts as ledgerPartsTable } from '@/db/schema';
+import { budgets, ledgerParts as ledgerPartsTable, monthlyPeriods } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import type { Period, LedgerPart } from '@/hooks/usePeriods';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Transfer } from '@/hooks/useTransfers';
@@ -40,14 +41,13 @@ export default function MonthDetailScreen() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [income, setIncome] = useState<ExternalIncome[]>([]);
   const [donation, setDonation] = useState<any>(null);
+  const [periodBudgets, setPeriodBudgets] = useState<any[]>([]);
   const [tab, setTab] = useState<Tab>((initialTab as Tab) ?? 'D');
   const [closeDialog, setCloseDialog] = useState(false);
 
   const periodId = Number(id);
 
-  useFocusEffect(
-    useCallback(() => {
-      async function load() {
+  const load = useCallback(async () => {
         const p = await getPeriod(periodId);
         if (!p) return;
         setPeriod(p);
@@ -61,6 +61,7 @@ export default function MonthDetailScreen() {
         setDonation(don);
         const inc = await getForPeriod(periodId);
         setIncome(inc);
+        setPeriodBudgets(await db.select().from(budgets).where(eq(budgets.periodId, periodId)));
 
         // Compute overall_in_account per part:
         // overall = sum of monthlyTotalCents across ALL periods + legacy imports
@@ -77,9 +78,12 @@ export default function MonthDetailScreen() {
           oia[partKey] = overall - spent - transferred - withdrawn;
         }
         setOverallInAccount(oia);
-      }
+  }, [periodId, getPeriod, getLedgerParts, getExpensesForPeriod, getTransfersForPeriod, getDonationRecord, getForPeriod, getLegacyTotals]);
+
+  useFocusEffect(
+    useCallback(() => {
       load();
-    }, [periodId]),
+    }, [load]),
   );
 
   const getPart = (type: string) => parts.find((p) => p.partType === type);
@@ -96,6 +100,30 @@ export default function MonthDetailScreen() {
     await reopenPeriod(periodId);
     const updated = await getPeriod(periodId);
     setPeriod(updated ?? null);
+  }
+
+  function handleDeleteBudget(budget: any) {
+    Alert.alert(
+      'Delete budget?',
+      `Delete the ${budget.scope === 'overall' ? 'overall' : budget.category} budget?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await db.delete(budgets).where(eq(budgets.id, budget.id));
+            if (budget.scope === 'overall') {
+              await db
+                .update(monthlyPeriods)
+                .set({ monthlyBudgetLimitCents: null })
+                .where(eq(monthlyPeriods.id, periodId));
+            }
+            await load();
+          },
+        },
+      ],
+    );
   }
 
   if (!period) return null;
@@ -150,8 +178,8 @@ export default function MonthDetailScreen() {
             theme={theme}
             period={period}
             overallInAccount={overallInAccount[tab] ?? 0}
-            onDeleteExpense={async (id: number) => { await deleteExpense(id); setExpenses(await getExpensesForPeriod(periodId)); }}
-            onDeleteTransfer={async (id: number) => { await deleteTransfer(id); setTransfers(await getTransfersForPeriod(periodId)); }}
+            onDeleteExpense={async (id: number) => { await deleteExpense(id); await load(); }}
+            onDeleteTransfer={async (id: number) => { await deleteTransfer(id); await load(); }}
             router={router}
             periodId={periodId}
           />
@@ -161,16 +189,16 @@ export default function MonthDetailScreen() {
           <IncomeView
             income={income}
             theme={theme}
-            onDelete={async (id: number) => { await deleteExternalIncome(id); setIncome(await getForPeriod(periodId)); }}
+            onDelete={async (id: number) => { await deleteExternalIncome(id); await load(); }}
             onAdd={() => router.push({ pathname: '/income/add', params: { periodId } })}
           />
         )}
 
         {tab === 'donation' && (
-          <DonationView donation={donation} theme={theme} onComplete={() => completeDonation(periodId).then(() => getDonationRecord(periodId).then(setDonation))} onUndo={() => undoDonation(periodId).then(() => getDonationRecord(periodId).then(setDonation))} />
+          <DonationView donation={donation} theme={theme} onComplete={async () => { await completeDonation(periodId); await load(); }} onUndo={async () => { await undoDonation(periodId); await load(); }} />
         )}
 
-        {tab === 'budget' && <BudgetView period={period} theme={theme} router={router} periodId={periodId} />}
+        {tab === 'budget' && <BudgetView period={period} budgets={periodBudgets} theme={theme} router={router} periodId={periodId} onDelete={handleDeleteBudget} />}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -350,7 +378,10 @@ function DonationView({ donation, theme, onComplete, onUndo }: any) {
   );
 }
 
-function BudgetView({ period, theme, router, periodId }: any) {
+function BudgetView({ period, budgets, theme, router, periodId, onDelete }: any) {
+  const overallBudget = budgets.find((budget: any) => budget.scope === 'overall');
+  const categoryBudgets = budgets.filter((budget: any) => budget.scope === 'category');
+
   return (
     <View style={{ gap: 8 }}>
       <Button mode="contained" icon="plus" onPress={() => router.push({ pathname: '/budgets/add', params: { periodId } })} style={{ alignSelf: 'flex-end', marginBottom: 8 }}>Add Category Budget</Button>
@@ -365,7 +396,19 @@ function BudgetView({ period, theme, router, periodId }: any) {
             ? `  ·  ${period.monthlySpentCents <= period.monthlyBudgetLimitCents ? 'Under budget ✓' : 'Over budget'}`
             : ''}
         </Text>
+        {overallBudget && <Button mode="text" icon="delete" textColor={theme.colors.error} onPress={() => onDelete(overallBudget)}>Delete Budget</Button>}
       </Surface>
+      {categoryBudgets.map((budget: any) => (
+        <Surface key={budget.id} style={[styles.budgetRow, { backgroundColor: theme.colors.surface, borderColor: theme.custom.cardBorder }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.txnTitle, { color: theme.colors.onSurface }]}>{budget.category}</Text>
+            <Text style={[styles.txnMeta, { color: theme.colors.onSurface + '77' }]}>
+              {formatCents(budget.spentAmountCents)} / {formatCents(budget.limitAmountCents)}
+            </Text>
+          </View>
+          <Button compact mode="text" icon="delete" textColor={theme.colors.error} onPress={() => onDelete(budget)}>Delete</Button>
+        </Surface>
+      ))}
     </View>
   );
 }
@@ -399,6 +442,7 @@ const styles = StyleSheet.create({
   catBar: { height: 10, borderRadius: 5 },
   catValue: { fontSize: 12, fontWeight: '700', width: 72, textAlign: 'right' },
   donationCard: { borderRadius: 12, borderWidth: 1, padding: 20, gap: 8 },
+  budgetRow: { borderRadius: 10, borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   donLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   donAmount: { fontSize: 32, fontWeight: '800' },
   donStatus: { fontSize: 14, fontWeight: '600' },

@@ -4,10 +4,12 @@ import { Text, Appbar, Button, Menu } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { db } from '@/db';
-import { budgets } from '@/db/schema';
+import { budgets, expenses } from '@/db/schema';
 import { MoneyInput } from '@/components/MoneyInput';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '@/lib/categories';
 import { nowIso } from '@/lib/dates';
+import { and, eq } from 'drizzle-orm';
+import { budgetStatus } from '@/lib/money';
 
 export default function AddBudgetScreen() {
   const { periodId: pidParam } = useLocalSearchParams<{ periodId?: string }>();
@@ -29,13 +31,24 @@ export default function AddBudgetScreen() {
 
     setSaving(true);
     try {
+      const periodId = Number(pidParam);
+      if (!Number.isFinite(periodId)) {
+        Alert.alert('Error', 'Open a month before adding a category budget.');
+        return;
+      }
+      const categoryExpenses = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.periodId, periodId), eq(expenses.category, category!)));
+      const spentAmountCents = categoryExpenses.reduce((sum, expense) => sum + expense.amountCents, 0);
+
       await db.insert(budgets).values({
-        periodId: Number(pidParam),
+        periodId,
         scope: 'category',
         category: category!,
         limitAmountCents: limitCents!,
-        spentAmountCents: 0,
-        status: 'under',
+        spentAmountCents,
+        status: budgetStatus(limitCents!, spentAmountCents),
         createdAt: nowIso(),
       });
       router.back();

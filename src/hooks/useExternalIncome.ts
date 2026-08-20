@@ -45,7 +45,10 @@ export function useExternalIncome() {
     if (parts[0]) {
       await db
         .update(ledgerParts)
-        .set({ currentBalanceCents: parts[0].currentBalanceCents + params.amountCents })
+        .set({
+          currentBalanceCents: parts[0].currentBalanceCents + params.amountCents,
+          monthlyTotalCents: parts[0].monthlyTotalCents + params.amountCents,
+        })
         .where(eq(ledgerParts.id, parts[0].id));
     }
 
@@ -67,7 +70,10 @@ export function useExternalIncome() {
     if (parts[0]) {
       await db
         .update(ledgerParts)
-        .set({ currentBalanceCents: parts[0].currentBalanceCents - record.amountCents })
+        .set({
+          currentBalanceCents: parts[0].currentBalanceCents - record.amountCents,
+          monthlyTotalCents: parts[0].monthlyTotalCents - record.amountCents,
+        })
         .where(eq(ledgerParts.id, parts[0].id));
     }
   }, []);

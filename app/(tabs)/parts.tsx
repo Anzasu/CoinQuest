@@ -243,7 +243,7 @@ export default function PartsScreen() {
           <Row label="B&M Savings (25%)" value={activePeriod.partAAmountCents} theme={theme} color={theme.custom.partA} />
           <Row label="B&M Expenses (25%)" value={activePeriod.partBAmountCents} theme={theme} color={theme.custom.partB} />
           <Row label="Emergency Fund (25%)" value={activePeriod.partCAmountCents} theme={theme} color={theme.custom.partC} />
-          <Row label="Spending (25%)" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
+          <Row label="Spending after donation" value={activePeriod.partDAmountCents} theme={theme} color={theme.custom.partD} />
         </View>
 
         <Text style={[styles.section, { color: theme.colors.onBackground + '88' }]}>B&M SAVINGS</Text>

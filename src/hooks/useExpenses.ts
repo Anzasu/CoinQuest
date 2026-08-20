@@ -184,8 +184,24 @@ export function useExpenses() {
     if (period[0]) {
       await db
         .update(monthlyPeriods)
-        .set({ monthlySpentCents: period[0].monthlySpentCents - exp.amountCents })
+        .set({ monthlySpentCents: Math.max(0, period[0].monthlySpentCents - exp.amountCents) })
         .where(eq(monthlyPeriods.id, exp.periodId));
+    }
+
+    const affectedBudgets = await db
+      .select()
+      .from(budgets)
+      .where(eq(budgets.periodId, exp.periodId));
+    for (const budget of affectedBudgets) {
+      if (budget.scope === 'category' && budget.category !== exp.category) continue;
+      const newSpent = Math.max(0, budget.spentAmountCents - exp.amountCents);
+      await db
+        .update(budgets)
+        .set({
+          spentAmountCents: newSpent,
+          status: budgetStatus(budget.limitAmountCents, newSpent),
+        })
+        .where(eq(budgets.id, budget.id));
     }
   }, []);
 

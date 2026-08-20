@@ -166,6 +166,60 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
     created_at TEXT NOT NULL
   );`);
 
+  await db.execAsync(`CREATE TABLE IF NOT EXISTS app_migrations (
+    name TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  );`);
+
+  const donationReservation = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM app_migrations WHERE name = 'reserve_donation_from_spending'`,
+  );
+  if (!donationReservation) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        UPDATE monthly_periods
+        SET
+          part_d_amount_cents = MAX(0, part_d_amount_cents - donation_goal_amount_cents),
+          monthly_spent_cents = MAX(
+            0,
+            monthly_spent_cents - CASE WHEN donation_completed = 1 THEN donation_goal_amount_cents ELSE 0 END
+          )
+        WHERE donation_goal_amount_cents > 0;
+
+        UPDATE ledger_parts
+        SET
+          starting_amount_cents = MAX(
+            0,
+            starting_amount_cents - COALESCE((
+              SELECT required_amount_cents FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 0)
+          ),
+          monthly_total_cents = MAX(
+            0,
+            monthly_total_cents - COALESCE((
+              SELECT required_amount_cents FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 0)
+          ),
+          current_balance_cents = current_balance_cents - CASE
+            WHEN COALESCE((
+              SELECT status FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 'pending') = 'completed' THEN 0
+            ELSE COALESCE((
+              SELECT required_amount_cents FROM donation_records
+              WHERE donation_records.period_id = ledger_parts.period_id
+            ), 0)
+          END
+        WHERE part_type = 'D';
+
+        INSERT INTO app_migrations (name, applied_at)
+        VALUES ('reserve_donation_from_spending', datetime('now'));
+      `);
+    });
+  }
+
   // Seed app_settings singleton if not present
   await db.execAsync(`INSERT OR IGNORE INTO app_settings (id, theme, user_name, created_at, updated_at)
     VALUES (1, 'lightBrown', 'Me', datetime('now'), datetime('now'));`);

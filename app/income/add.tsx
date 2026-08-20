@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Button, Appbar, TextInput, SegmentedButtons } from 'react-native-paper';
+import { Text, Button, Appbar, TextInput, RadioButton, TouchableRipple } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useExternalIncome } from '@/hooks/useExternalIncome';
@@ -81,16 +81,21 @@ export default function AddIncomeScreen() {
         />
 
         <Text style={[styles.label, { color: theme.colors.onBackground + '88' }]}>INCOME TYPE</Text>
-        <SegmentedButtons
-          value={type}
-          onValueChange={(v) => setType(v as IncomeType)}
-          buttons={[
-            { value: 'refund', label: 'Refund' },
-            { value: 'gift', label: 'Gift' },
-            { value: 'sideIncome', label: 'Side income' },
-            { value: 'other', label: 'Other' },
-          ]}
-        />
+        <View style={[styles.radioGroup, { borderColor: theme.custom.cardBorder, backgroundColor: theme.colors.surface }]}>
+          {([
+            ['refund', 'Refund'],
+            ['gift', 'Gift'],
+            ['sideIncome', 'Side income'],
+            ['other', 'Other'],
+          ] as const).map(([value, label]) => (
+            <TouchableRipple key={value} onPress={() => setType(value)}>
+              <View style={styles.radioRow}>
+                <RadioButton value={value} status={type === value ? 'checked' : 'unchecked'} onPress={() => setType(value)} />
+                <Text style={[styles.radioLabel, { color: theme.colors.onSurface }]}>{label}</Text>
+              </View>
+            </TouchableRipple>
+          ))}
+        </View>
 
         <TextInput
           label="Note (optional)"
@@ -121,6 +126,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: 16, gap: 12 },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  radioGroup: { borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+  radioRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
+  radioLabel: { fontSize: 15, flex: 1 },
   hint: { fontSize: 13, lineHeight: 20 },
   footer: { flexDirection: 'row', padding: 16, gap: 12, borderTopWidth: 1, justifyContent: 'flex-end' },
   saveBtn: { flex: 1 },

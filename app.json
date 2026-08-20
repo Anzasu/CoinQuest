@@ -26,7 +26,8 @@
         "expo-build-properties",
         {
           "android": {
-            "enableProguardInReleaseBuilds": true
+            "enableProguardInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ],
@@ -45,6 +46,13 @@
     "scheme": "coinquest",
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9df39a64-ae5b-415c-b394-80ef749ce0cd"
+      }
+    },
+    "owner": "appxdev26"
   }
 }

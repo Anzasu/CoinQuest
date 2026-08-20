@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, ScrollView, StyleSheet, Alert
+  View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform
 } from 'react-native';
 import {
   Text, Button, TextInput, Divider, IconButton, Surface, Appbar
@@ -172,7 +172,11 @@ export default function NewMonthScreen() {
       </Appbar.Header>
 
       {targetMonth == null || targetYear == null ? null : (
-        <>
+        <KeyboardAvoidingView
+          style={styles.keyboardArea}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
 
       {/* Step indicator */}
       <View style={styles.steps}>
@@ -189,7 +193,11 @@ export default function NewMonthScreen() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {step === 'salary' && (
           <View style={styles.form}>
             <Text style={[styles.formTitle, { color: theme.colors.onBackground }]}>Enter your salary</Text>
@@ -261,7 +269,7 @@ export default function NewMonthScreen() {
             <PreviewRow label="B&M Savings (25%)" value={split.partA} color={theme.custom.partA} theme={theme} />
             <PreviewRow label="B&M Expenses (25%)" value={split.partB} color={theme.custom.partB} theme={theme} />
             <PreviewRow label="Emergency Fund (25%)" value={split.partC} color={theme.custom.partC} theme={theme} />
-            <PreviewRow label="Spending (25%)" value={split.partD} color={theme.custom.partD} theme={theme} />
+            <PreviewRow label="Spending after donation" value={split.partD - donationGoal} color={theme.custom.partD} theme={theme} />
             <Divider style={{ marginVertical: 8 }} />
             <PreviewRow label="Donation goal (25% of D)" value={donationGoal} color={theme.colors.secondary} theme={theme} />
             {budgetCents != null && (
@@ -287,7 +295,7 @@ export default function NewMonthScreen() {
           </Button>
         )}
       </View>
-        </>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
@@ -307,13 +315,14 @@ function PreviewRow({ label, value, color, theme }: { label: string; value: numb
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  keyboardArea: { flex: 1 },
   steps: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 0 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   stepDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepLabel: { fontSize: 12, fontWeight: '600' },
   stepLine: { width: 24, height: 1, marginHorizontal: 4 },
-  scroll: { padding: 16, gap: 12 },
+  scroll: { padding: 16, paddingBottom: 32, gap: 12 },
   form: { gap: 12 },
   formTitle: { fontSize: 18, fontWeight: '700' },
   formSub: { fontSize: 14, lineHeight: 20 },

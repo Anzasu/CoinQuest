@@ -54,6 +54,7 @@ export function usePeriods() {
       const remainingCents = remainingAfterBills(params.salaryAmountCents, totalBillsCents);
       const split = splitSalary(remainingCents);
       const donationGoal = calculateDonationGoal(split.partD);
+      const spendablePartD = split.partD - donationGoal;
       const now = nowIso();
 
       // Create period
@@ -69,7 +70,7 @@ export function usePeriods() {
           partAAmountCents: split.partA,
           partBAmountCents: split.partB,
           partCAmountCents: split.partC,
-          partDAmountCents: split.partD,
+          partDAmountCents: spendablePartD,
           donationGoalAmountCents: donationGoal,
           donationCompleted: false,
           monthlyBudgetLimitCents: params.monthlyBudgetLimitCents ?? null,
@@ -97,7 +98,7 @@ export function usePeriods() {
         { periodId: period.id, partType: 'A', startingAmountCents: split.partA, currentBalanceCents: split.partA, monthlyTotalCents: split.partA },
         { periodId: period.id, partType: 'B', startingAmountCents: split.partB, currentBalanceCents: split.partB, monthlyTotalCents: split.partB },
         { periodId: period.id, partType: 'C', startingAmountCents: split.partC, currentBalanceCents: split.partC, monthlyTotalCents: split.partC },
-        { periodId: period.id, partType: 'D', startingAmountCents: split.partD, currentBalanceCents: split.partD, monthlyTotalCents: split.partD },
+        { periodId: period.id, partType: 'D', startingAmountCents: spendablePartD, currentBalanceCents: spendablePartD, monthlyTotalCents: spendablePartD },
       ]);
 
       // Create donation record

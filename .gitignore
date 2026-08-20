@@ -16,6 +16,9 @@ ios/
 
 # EAS
 .easignore
+credentials.json
+*.jks
+*.keystore
 
 # Environment
 .env
